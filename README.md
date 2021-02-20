@@ -7,6 +7,9 @@ Chalmers and ETHZ Masters Thesis: Learning Interpretable Prototype Trajectories 
 - Python 3.7 or higher
 - PyTorch version which is compatible with your setup
 
+## Files to download beforehand
+- Data from the ADNI dataset, specifically the TADPOLE challenge dataset (http://adni.loni.usc.edu/)
+
 ## Setup
 
 To install the all dependencies needed for this project to run please run the
