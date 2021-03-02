@@ -1,10 +1,10 @@
 #!/usr/bin/env python
+# Adapted from code written by Minh Nguyen and CBIG under MIT license:
 """
 The purpose of this module is to generate train, test, and validation sets
 """
 import argparse
-import os
-import os.path as path
+
 import numpy as np
 import pandas as pd
 

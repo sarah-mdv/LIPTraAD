@@ -2,9 +2,7 @@
 The purpose of this module is to load the data, to fill it according to a requested strategy,
 and to return batches of the data to the main function
 """
-
-# Written by Minh Nguyen and CBIG under MIT license:
-# https://github.com/ThomasYeoLab/CBIG/blob/master/LICENSE.md
+# Adapted from code written by Minh Nguyen and CBIG under MIT license:
 from __future__ import print_function, division
 import numpy as np
 from scipy.interpolate import interp1d

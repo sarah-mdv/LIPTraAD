@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-# Written by Minh Nguyen and CBIG under MIT license:
-# https://github.com/ThomasYeoLab/CBIG/blob/master/LICENSE.md
+# Adapted from code written by Minh Nguyen and CBIG under MIT license:
 from __future__ import print_function, division
 import argparse
 import pickle
