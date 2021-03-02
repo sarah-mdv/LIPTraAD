@@ -1,17 +1,19 @@
 import logging
 import argparse
 import json
-from src.preprocessing import modules as fill_modules
-from src.preprocessing.imputation import FillerModule
 from datetime import datetime
 from pathlib import Path
 
-from src.preprocess.fold_generator import FoldGen
+from src.preprocess.dataloader import (
+    STRATEGIES,
+    DataSet
+)
 
-fill_dict = {module.name: module for module in fill_modules}
+from src.preprocess.fold_generator import FoldGen
 
 from src.misc import (
     _setup_logger,
+    load_feature,
     LOG_DIR
 )
 
@@ -29,19 +31,13 @@ def main(args):
     LOGGER = logging.getLogger("src.main")
 
     #Setup fold iterator
-    folds = FoldGen(args.seed, args.datafile, args.features, args.nbfolds, results_dir)
+    folds = FoldGen(args.seed, args.data, args.features, args.nbfolds, results_dir)
 
+    #Generate datasets over folds and perform training and evaluation
     for fold in folds:
-        mask_frame, val_frame, test_frame = fold
-    #Load data
-    data_dict = {}
-
-    #Get the imputation model selected
-    filler_module = fill_dict[args.filler]
-    LOGGER.info(f"Performing imputation with {args.filler}")
-
-    #Perform imputation on data
-    data_dict = filler_module.run(data_dict)
+        fold_dataset = DataSet(fold, args.validation, args.data,
+                                load_feature(args.features), strategy=args.strategy, batch_size=args.batch_size)
+        fold_dataset.gen_data()
 
     return 0
 
@@ -63,14 +59,11 @@ def get_args():
     parser.add_argument('--features', required=True)
     parser.add_argument('--nbfolds', type=int, required=True)
 
-    #Set the type of imputation
-    parser.add_argument(
-        "--filler",
-        dest="filler",
-        action="store_true",
-        choices=fill_dict.keys(),
-        help="Type of filling that will be done on the data."
-    )
+    #Dataloader arguments
+    parser.add_argument('--strategy', choices=STRATEGIES.keys(), required=True)
+    parser.add_argument('--batch_size', type=int, required=True)
+    parser.add_argument('--out')
+    parser.add_argument('--validation', action='store_true')
 
     return parser.parse_args()
 

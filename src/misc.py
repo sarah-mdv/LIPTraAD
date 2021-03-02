@@ -27,10 +27,7 @@ LOGGER = logging.getLogger(__name__)
 SRC_DIR = Path(__file__).parent.resolve()
 DATA_DIR = SRC_DIR / Path("data")
 LOG_DIR = SRC_DIR / Path("logs")
-PREPROCESSING_DIR = DATA_DIR / Path("preprocessed")
 
-TADPOLE_DIR = DATA_DIR / Path("TADPOLE")
-ADNIMERGE = TADPOLE_DIR / Path("ADNIMERGE.csv")
 
 
 def _setup_logger(log_level: int) -> None:
@@ -49,7 +46,7 @@ def _setup_logger(log_level: int) -> None:
 
     # set the log level of the LOGGER to debug such that no messages are discarded
     logger.setLevel(logging.DEBUG)
-    # what is print in the console should match the level specified by -v{v}
+    # what is print in the console should match the level specified by -d{v}
     console_handler.setLevel(log_level)
     # in the file we want all log messages again
     file_handler.setLevel(logging.DEBUG)
