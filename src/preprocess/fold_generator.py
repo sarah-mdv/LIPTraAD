@@ -96,7 +96,6 @@ def gen_fold(data, nb_folds, test_fold, folds, leftover, outdir):
         [folds[i] for i in train_folds] + leftover, axis=0)
     val_subj = folds[val_fold]
     test_subj = folds[test_fold]
-    print(val_subj)
 
     train_mask = (np.in1d(data.RID, train_subj) & data.has_data).astype(int)
 

@@ -16,8 +16,7 @@ from src.misc import LOG_DIR
 
 import logging
 
-LOGGER = logging.getLogger(__name__)
-
+LOGGER = logging.getLogger("src.main")
 
 def typecheck(interp_func):
     def func_wrapper(month_true, val_true, val_default, month_interp):
@@ -270,6 +269,7 @@ class Sorted(object):
     def __next__(self):
         if self.idx == len(self.subjects):
             self.idx = 0
+            LOGGER.debug("End of testing data")
             raise StopIteration()
 
         rid = self.subjects[self.idx]
@@ -318,6 +318,7 @@ class Random(Sorted):
         if self.idx == len(self.subjects):
             self.rng.shuffle(self.subjects)
             self.idx = 0
+            LOGGER.debug("End of training data")
             raise StopIteration()
 
         rid_list = self.subjects[self.idx:self.idx + self.batch_size]
@@ -357,7 +358,7 @@ class DataSet:
         self.train = object
         self.test = object
 
-    def get_data(self):
+    def gen_data(self):
         """
         Generate training/test data batches and save as pickle file
         *args* specify
@@ -368,9 +369,9 @@ class DataSet:
             out: path to save pickle file
             validation: evaluate on validation subjects (instead of test subjects)
         """
+        LOGGER.debug("Generating training and test datasets for fold {}".format(self.fold[3]))
 
-        ret = {}
-        mask_frame, rest = self.fold
+        mask_frame = self.fold[0]
         train_mask, pred_mask, pred_mask_frame = misc.get_mask(
             mask_frame, self.validation)
         self.baseline, self.pred_start = misc.get_baseline_prediction_start(
@@ -381,27 +382,29 @@ class DataSet:
 
         tf = frame.loc[train_mask, self.features]
         self.mean = tf.mean()
-        self.mean = tf.std()
+        self.std = tf.std()
         self.VentICVstd = (tf['Ventricles'] / tf['ICV']).std()
 
+        LOGGER.debug("Training data mean per feature: \n{}".format(self.mean))
+        LOGGER.debug("Training data standard deviation:\n{}".format(self.std))
         #Normalize the data
-        frame[self.features] = (frame[self.features] - ret['mean']) / ret['stds']
+        frame[self.features] = (frame[self.features] - self.mean) / self.std
+
+        #TODO: Why these default values
         default_val = {f: 0. for f in self.features}
         default_val['DX'] = 0.
 
-        data = extract(frame[train_mask], self.strategy, self.features,
-                                  default_val)
+        data = extract(frame[train_mask], self.strategy, self.features, default_val)
         self.train = Random(data, self.batch_size, self.features)
 
-        data = extract(frame[pred_mask], self.strategy, self.features,
-                                  default_val)
+        data = extract(frame[pred_mask], self.strategy, self.features, default_val)
         self.test = Sorted(data, 1, self.features)
 
-        print('train', len(self.train.subjects), 'subjects')
-        print('test', len(self.test.subjects), 'subjects')
-        print(len(self.features), 'features')
+        LOGGER.info("Training datapoints {}".format(len(self.train.subjects)))
+        LOGGER.info("Testing datapoints {}".format(len(self.test.subjects)))
+        LOGGER.info("{} features".format(len(self.features)))
 
-        return ret
+        LOGGER.debug("Features {}".format(self.features))
 
     def cache_data(self, outdir):
         LOGGER.debug("Pickle fold {} data at {}".format(self.fold[3], self.outdir))
@@ -419,10 +422,7 @@ class DataSet:
 
 
 def main(args):
-    fields = misc.load_feature(args.features)
-    with open(args.out, 'wb') as fhandler:
-        d = get_data(args, fields)
-        pickle.dump(d, fhandler)
+    return 0
 
 
 def get_args():
