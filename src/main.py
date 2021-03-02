@@ -65,6 +65,17 @@ def get_args():
     parser.add_argument('--out')
     parser.add_argument('--validation', action='store_true')
 
+    #Model arguments
+    parser.add_argument('--model', '-m', required=True)
+    parser.add_argument('--epochs', type=int, required=True)
+    parser.add_argument('--lr', type=float, required=True)
+    parser.add_argument('--w_ent', type=float, default=1.)
+    parser.add_argument('--nb_layers', type=int, default=1)
+    parser.add_argument('--h_size', type=int, default=512)
+    parser.add_argument('--i_drop', type=float, default=.0)
+    parser.add_argument('--h_drop', type=float, default=.0)
+    parser.add_argument('--weight_decay', type=float, default=.0)
+
     return parser.parse_args()
 
 
