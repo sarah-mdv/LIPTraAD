@@ -4,15 +4,12 @@ from pathlib import Path
 from typing import Optional, List
 
 import pandas as pd
-import torch
 import torch.nn as nn
 
 from ignite.handlers import ModelCheckpoint
 
-import numpy as np
-
 from src.misc import DATA_DIR
-from src.model.misc import mae_loss
+from src.preprocess.dataloader import DataSet
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,15 +20,16 @@ class BaseClass:
 
 
 class Classifier(BaseClass):
-    def __init__(self, name: str, model:nn.Module):
+    def __init__(self, name: str):
         super().__init__()
         self.name = name
-        self.model = model # type: nn.Module
+        self.model = None # type: nn.Module
         self.score = None
         self.max_length = None
         self.cudnn = False
+        self.optimizer = None
 
-    def build_model(self) -> nn.Module:
+    def build_model(self, **kwargs) -> nn.Module:
         """
         Build the model which is later called by fit method to train on given data.
         The final version of the model should be returned.
@@ -39,7 +37,15 @@ class Classifier(BaseClass):
         """
         pass
 
-    def create_weight_save_callback(self, path: Optional[str] = None) -> Callback:
+    def build_optimizer(self, lr, weight_decay):
+        """
+        Build the optimizer that should be used during training
+        :param lr: Learning rate for the optimizer
+        :param weight_decay:
+        :return:
+        """
+
+    def create_weight_save_callback(self, path: Optional[str] = None) -> ModelCheckpoint:
         """
         Create an Ignite callback to save the model after each epoch.
         Needs to be registered when starting to train the model.
@@ -60,20 +66,23 @@ class Classifier(BaseClass):
         # Create a callback that saves the model's weights
         return ModelCheckpoint(dirname=checkpoint_path.parent())
 
-    def fit(self, x_train, y_train, epochs: int, validation=None):
+    def fit(self, data:DataSet, epochs: int):
         """
         Start the training of the model with trainings data
+        The methods build_model and build_optimizer should be called before this method
         :param x_train: x data
         :param y_train: labels
         :param epochs: number of epochs to train for.
-        :param validation: Data to use for validation
         :return: None
         """
         if not self.model:
             LOGGER.error("ERROR: self.model is None. Did you call build_model()?")
             exit(1)
+        elif not self.optimizer:
+            LOGGER.error("ERROR: self.optimizer is None. Did you call build_optimizer()?")
+            exit(1)
 
-    def predict(self, data: List[List[str]]):
+    def predict(self, data: DataSet):
         """
         Given unknown input data predict the labels for this.
         :param data:
@@ -103,16 +112,14 @@ class Classifier(BaseClass):
         for idx, pred in enumerate(pred_Y):
             df.loc[idx] = idx + 1, -1 if pred < 1 else 1
 
-        LOGGER.info(f"Writting submission to {output_path}")
+        LOGGER.info(f"Writing submission to {output_path}")
         with output_path.open("w") as f:
             df.to_csv(f, index=False, header=True)
 
-    def run(self, training_files, testing_files, prediction_file, predict=False):
+    def run(self, data: DataSet, epochs: int, predict=False, seed=0):
         """
         Run the model (train, test, predict)
-        :param training_files: Files to use for training
-        :param testing_files: Files to use for validation.
-        :param prediction_file: Which file to use for prediction
+        :param data: Dataset containing training, validation, and test data
         :param predict: Whether to predict test data labels and write submissions file
         :return:
         """
