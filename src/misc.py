@@ -115,7 +115,7 @@ def get_data_dict(frame, features):
     return ret
 
 
-def build_pred_frame(prediction, outpath=''):
+def build_pred_frame(prediction, outpath=None):
     """
     Construct the forecast spreadsheet following TADPOLE format
     Args:

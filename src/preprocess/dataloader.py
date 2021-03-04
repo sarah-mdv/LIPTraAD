@@ -16,6 +16,7 @@ import logging
 
 LOGGER = logging.getLogger("src.main")
 
+
 def typecheck(interp_func):
     def func_wrapper(month_true, val_true, val_default, month_interp):
         assert isinstance(month_true, np.ndarray)
@@ -292,7 +293,6 @@ def batch(matrices):
     Returns:
         (ndarray): [max_nb_timpoint, nb_subjects, nb_features]
     """
-    #print(matrices[0])
     maxlen = max(len(m) for m in matrices)
     ret = [
         np.pad(m, [(0, maxlen - len(m)), (0, 0)], 'constant')[:, None, :]
@@ -336,7 +336,6 @@ class Random(Sorted):
 
         return subj_data
 
-
 class DataSet:
     def __init__(self, fold, validation, datafile, features,
                     strategy=ff_fill, batch_size=128):
@@ -353,8 +352,11 @@ class DataSet:
         self.mean = 0.
         self.std = 0.
         self.VentICVstd = 0.
-        self.train = object
-        self.test = object
+        self.train = object #Random()
+        self.test = object #Sorted()
+        self.prediction = None
+
+        self.gen_data()
 
     def gen_data(self):
         """
