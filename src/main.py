@@ -10,14 +10,14 @@ from src.preprocess.dataloader import (
     STRATEGIES,
     DataSet
 )
+
+from src.evaluation.evaluate import evaluate
 from src.model import run_from_name
 from src.preprocess.fold_generator import FoldGen
-from src.model.nguyen_classifier import RNNClassifier
 from src.misc import (
     _setup_logger,
     load_feature,
     LOG_DIR,
-    build_pred_frame
 )
 
 
@@ -43,6 +43,9 @@ def main(args):
                                     load_feature(args.features), strategy=args.strategy, batch_size=args.batch_size)
             validation_dataset = fold[1] if args.validation else fold[2]
             run_from_name(args.model, fold_dataset, validation_dataset, args)
+            result_dict = evaluate(validation_dataset, fold_dataset.prediction)
+            LOGGER.info("mAUC: {}".format(result_dict["mAUC"]))
+            LOGGER.info("bca: {}".format(result_dict["bca"]))
     return 0
 
 #ToDo: Add option to cache the data sets so we can reuse them easily
@@ -139,9 +142,11 @@ def get_args():
     parser.add_argument('--weight_decay',
                         type=float,
                         default=.0)
-
+    parser.add_argument('--inter_res',
+                        action="store_true",
+                        help="Flag indicating whether to store intermediate values (train, test sets)")
     parser.add_argument('--out',
-                        default="",
+                        required=True,
                         help="Output file for prediction")
 
     return parser.parse_args()
