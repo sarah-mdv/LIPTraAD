@@ -19,10 +19,6 @@ from src.model.misc import(
     ent_loss,
     mae_loss,
     to_cat_seq,
-    is_date_column,
-    parse_data,
-    MAUC,
-    calcBCA,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -182,32 +178,11 @@ class RNNClassifier(Classifier):
                 misc.add_ci_col(oval[:, 1] / oval[:, 2], 5e-4, 0, 1))
         return ret
 
-    def run(self, data: DataSet, epochs: int, predict=False, seed=0, out=""):
+    def run(self, data: DataSet, epochs: int, out, predict=False, seed=0):
         self.fit(data, epochs, seed)
-        if predict:
-            outpath = misc.LOG_DIR / Path(out)
-            data.prediction = misc.build_pred_frame(self.predict(data), outpath)
-            LOGGER.info("Predictions have been output at {}".format(outpath))
 
-    def evaluate(self, ref_frame, pred_frame):
-        """ Evaluate mAUC, BCA, ADAS13 MAE, and ventricles MAE """
-        assert is_date_column(ref_frame['CognitiveAssessmentDate'])
-        assert is_date_column(ref_frame['ScanDate'])
-        assert is_date_column(pred_frame['Forecast Date'])
-        ref_frame.Diagnosis = ref_frame.Diagnosis.map(misc.Diagnosis_conv)
-        print(ref_frame)
-        true_labels_and_prob, p_diag, p_adas, p_vent, t_diag, t_adas, t_vent = \
-            parse_data(ref_frame, pred_frame)
+        outpath = misc.LOG_DIR / Path(out)
+        data.prediction = misc.build_pred_frame(self.predict(data), outpath)
+        LOGGER.info("Predictions have been output at {}".format(outpath))
 
-        try:
-            mauc = MAUC(true_labels_and_prob, no_classes=3)
-        except ZeroDivisionError:
-            mauc = float('NaN')
-
-        bca = calcBCA(p_diag, t_diag.astype(int), no_classes=3)
-
-        adas = np.mean(np.abs(p_adas - t_adas))
-        vent = np.mean(np.abs(p_vent - t_vent))
-
-        return {'mAUC': mauc, 'bca': bca, 'adasMAE': adas, 'ventsMAE': vent}
 
