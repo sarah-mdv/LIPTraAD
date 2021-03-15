@@ -64,7 +64,7 @@ class RnnModelInterp(torch.nn.Module):
 
         return i_mask, r_mask
 
-    def forward(self, _cat_seq, _val_seq):
+    def forward(self, _cat_seq, _val_seq, latent=False):
         out_cat_seq, out_val_seq = [], []
 
         hidden = self.init_hidden_state(_val_seq.shape[1])
@@ -85,8 +85,9 @@ class RnnModelInterp(torch.nn.Module):
 
             idx = np.isnan(cat_seq[j])
             cat_seq[j][idx] = o_cat.data.cpu().numpy()[idx]
-
-        return torch.stack(out_cat_seq), torch.stack(out_val_seq)
+        if latent:
+            return hidden
+        return hidden if latent else torch.stack(out_cat_seq), torch.stack(out_val_seq)
 
 
 class SingleStateRNN(RnnModelInterp):
@@ -166,6 +167,7 @@ class LSTM(RnnModelInterp):
         o_val = self.hid2measures(h_t) + h_t.new(i_val)
 
         return o_cat, o_val, states
+
 
 
 MODEL_DICT = {'LSTM': LSTM, 'MinRNN': MinimalRNN, 'LSS': LSS}
