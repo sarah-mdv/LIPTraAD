@@ -390,7 +390,7 @@ class DataSet:
         #Normalize the data
         frame[self.features] = (frame[self.features] - self.mean) / self.std
 
-        #TODO: Why these default values
+        #TODO: Why these default values ?
         default_val = {f: 0. for f in self.features}
         default_val['DX'] = 0.
 

@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
+import itertools
 import numpy as np
 import pandas as pd
 
@@ -27,7 +28,6 @@ LOGGER = logging.getLogger(__name__)
 SRC_DIR = Path(__file__).parent.resolve()
 DATA_DIR = SRC_DIR / Path("data")
 LOG_DIR = SRC_DIR / Path("logs")
-
 
 
 def _setup_logger(log_level: int) -> None:
@@ -176,7 +176,7 @@ def make_date_col(starts, duration):
     Return a list of list of dates
     The start date of each list of dates is specified by *starts*
     """
-    date_range = [relativedelta(months=i) for i in range(duration)]
+    date_range = [relativedelta(months=i) for i in range(0, duration)]
     ret = []
     for start in starts:
         ret.append([start + d for d in date_range])
@@ -229,7 +229,9 @@ def Diagnosis_conv(value):
         return 1.
     if value == 'AD':
         return 2.
-    return float('NaN')
+    if type(value) == str:
+        return float('NaN')
+    return value
 
 
 def DX_conv(value):
@@ -314,3 +316,4 @@ def get_mask(frame, use_validation):
 def read_csv(fpath):
     """ Load CSV with converters """
     return pd.read_csv(fpath, converters=CONVERTERS)
+

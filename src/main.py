@@ -2,22 +2,19 @@ import logging
 import argparse
 import json
 from datetime import datetime
-from os import listdir
-from os.path import isfile, join
-from pathlib import Path
-
-from src.preprocess.dataloader import (
-    STRATEGIES,
-    DataSet
-)
 
 from src.evaluation.evaluate import evaluate
 from src.model import run_from_name
 from src.preprocess.fold_generator import FoldGen
+
 from src.misc import (
     _setup_logger,
     load_feature,
     LOG_DIR,
+)
+from src.preprocess.dataloader_nguyen import (
+    STRATEGIES,
+    DataSet
 )
 
 
@@ -100,6 +97,11 @@ def get_args():
                         default="",
                         help="Add the path of a directory here if you want to reuse previously generated folds"
                         )
+    parser.add_argument('--encoder_model',
+                        type=str,
+                        default="",
+                        help="Load an already trained encoder model from memory"
+                        )
 
     #Model arguments
     #ToDo:Add choices
@@ -112,6 +114,11 @@ def get_args():
                         type=int,
                         required=True,
                         help="Number of epochs to train"
+                        )
+    parser.add_argument('--pre_epochs',
+                        type=int,
+                        default=10,
+                        help="Number of epochs for pretraining the encoder layer"
                         )
     parser.add_argument('--lr',
                         type=float,
@@ -142,12 +149,27 @@ def get_args():
     parser.add_argument('--weight_decay',
                         type=float,
                         default=.0)
+    parser.add_argument('--n_prototypes',
+                        type=int,
+                        default=10)
     parser.add_argument('--inter_res',
                         action="store_true",
                         help="Flag indicating whether to store intermediate values (train, test sets)")
     parser.add_argument('--out',
                         required=True,
                         help="Output file for prediction")
+    parser.add_argument('--emcoder_model',
+                        default="",
+                        help="Path to pretrained encoder model")
+    parser.add_argument('--beta',
+                        type=float,
+                        default=.5)
+    parser.add_argument('--n_jobs',
+                        type=int,
+                        default=1)
+    parser.add_argument('--log-interval', type=int, default=100,
+                        help=('how many batches to wait before logging the '
+                              'training status'))
 
     return parser.parse_args()
 
