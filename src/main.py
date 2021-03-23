@@ -35,14 +35,10 @@ def main(args):
         folds = FoldGen(args.seed, args.data, args.features, args.folds, results_dir)
 
         #Generate datasets over folds and perform training and evaluation
-        for fold in folds:
-            fold_dataset = DataSet(fold, args.validation, args.data,
-                                    load_feature(args.features), strategy=args.strategy, batch_size=args.batch_size)
+        for i, fold in enumerate(folds):
+
+            fold_dataset = run_from_name(args.model, fold, i, args)
             validation_dataset = fold[1] if args.validation else fold[2]
-            run_from_name(args.model, fold_dataset, validation_dataset, args)
-            result_dict = evaluate(validation_dataset, fold_dataset.prediction)
-            LOGGER.info("mAUC: {}".format(result_dict["mAUC"]))
-            LOGGER.info("bca: {}".format(result_dict["bca"]))
     return 0
 
 #ToDo: Add option to cache the data sets so we can reuse them easily
@@ -158,9 +154,6 @@ def get_args():
     parser.add_argument('--out',
                         required=True,
                         help="Output file for prediction")
-    parser.add_argument('--emcoder_model',
-                        default="",
-                        help="Path to pretrained encoder model")
     parser.add_argument('--beta',
                         type=float,
                         default=.5)

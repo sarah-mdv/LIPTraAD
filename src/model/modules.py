@@ -36,6 +36,7 @@ class RnnModelInterp(torch.nn.Module):
         super(RnnModelInterp, self).__init__()
         self.h_ratio = 1. - kwargs['h_drop']
         self.i_ratio = 1. - kwargs['i_drop']
+        self.h_size = h_size
 
         self.hid2category = nn.Linear(h_size, nb_classes)
         self.hid2measures = nn.Linear(h_size, nb_measures)
@@ -63,7 +64,9 @@ class RnnModelInterp(torch.nn.Module):
                 mask.bernoulli_(self.h_ratio)
 
         return i_mask, r_mask
-
+    """
+    Perform forwards prediction  and if latent=True return the hidden state at each time point
+    """
     def forward(self, _cat_seq, _val_seq, latent=False):
         out_cat_seq, out_val_seq = [], []
 
@@ -72,6 +75,7 @@ class RnnModelInterp(torch.nn.Module):
 
         cat_seq = _cat_seq.copy()
         val_seq = _val_seq.copy()
+        hidden_batch = []
         for i, j in zip(range(len(val_seq)), range(1, len(val_seq))):
             o_cat, o_val, hidden = self.predict(cat_seq[i], val_seq[i], hidden,
                                                 masks)
@@ -85,9 +89,13 @@ class RnnModelInterp(torch.nn.Module):
 
             idx = np.isnan(cat_seq[j])
             cat_seq[j][idx] = o_cat.data.cpu().numpy()[idx]
+            hidden_batch.append(hidden[len(hidden) - 1].detach().cpu().numpy())
+        if len(hidden_batch) != 0:
+            hidden_batch = np.vstack(hidden_batch)
+            hidden_batch = np.array(hidden_batch)
         if latent:
-            return hidden
-        return hidden if latent else torch.stack(out_cat_seq), torch.stack(out_val_seq)
+            return hidden_batch
+        return hidden_batch if latent else torch.stack(out_cat_seq), torch.stack(out_val_seq)
 
 
 class SingleStateRNN(RnnModelInterp):
