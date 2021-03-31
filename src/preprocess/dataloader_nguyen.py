@@ -216,15 +216,13 @@ def extract(frame, strategy, features, defaults):
         """
         xout = np.arange(xin[-1] - xin[0] + 1)
 
-        in_seqs = {'Month_bl': xout}
-        mk_seqs = {'Month_bl': np.zeros(len(xout), dtype=bool)}
-        th_seqs = {'Month_bl': np.full(len(xout), np.nan)}
-
+        in_seqs = {'Month_bl': xin}
+        mk_seqs = {'Month_bl': np.zeros(len(xin), dtype=bool)}
+        th_seqs = {'Month_bl': np.full(len(xin), np.nan)}
         for f in fields[1:]:
             yin = sframe[f].values
             in_seqs[f], mk_seqs[f], th_seqs[f] = interp_fn(
-                xin, yin, defaults[f], xout)
-
+                xin, yin, defaults[f], xin)
         ret[rid] = {'input': np.array([in_seqs[f] for f in fields]).T}
         ret[rid]['mask'] = np.array([mk_seqs[f] for f in fields]).T
         ret[rid]['truth'] = np.array([th_seqs[f] for f in fields]).T
@@ -298,7 +296,8 @@ def batch(matrices):
         np.pad(m, [(0, maxlen - len(m)), (0, 0)], 'constant')[:, None, :]
         for m in matrices
     ]
-    return np.concatenate(ret, axis=1)
+    np_ret = np.concatenate(ret, axis=1)
+    return np_ret
 
 
 class Random(Sorted):
@@ -319,14 +318,17 @@ class Random(Sorted):
             LOGGER.debug("End of training data")
             raise StopIteration()
 
+        subj_data = {}
+
         rid_list = self.subjects[self.idx:self.idx + self.batch_size]
+        subj_data['rids'] = np.array(rid_list)
+
         self.idx += len(rid_list)
 
         input_batch = batch([self.data[rid]['input'] for rid in rid_list])
         mask_batch = batch([self.data[rid]['mask'] for rid in rid_list])
         truth_batch = batch([self.data[rid]['truth'] for rid in rid_list])
 
-        subj_data = {}
         for k, mask in self.mask.items():
             subj_data[k] = input_batch[:, :, mask]
         subj_data['cat_msk'] = mask_batch[:, :, self.mask['cat']]
@@ -337,9 +339,20 @@ class Random(Sorted):
         return subj_data
 
 class DataSet:
-    def __init__(self, fold, validation, datafile, features,
+    def __init__(self, fold, validation, datafile, features, fold_n,
                     strategy=ff_fill, batch_size=128):
+        """
+        Generate training/test data batches and save as pickle file
+        *args* specify
+            mask: path to mask file
+            strategy: filling strategy
+            spreadsheet: path to TADPOLE data
+            batch_size: batch size
+            out: path to save pickle file
+            validation: evaluate on validation subjects (instead of test subjects)
+        """
         self.fold = fold
+        self.fold_n = fold_n
         self.validation = validation
         self.datafile = datafile
         self.features = features
@@ -359,17 +372,8 @@ class DataSet:
         self.gen_data()
 
     def gen_data(self):
-        """
-        Generate training/test data batches and save as pickle file
-        *args* specify
-            mask: path to mask file
-            strategy: filling strategy
-            spreadsheet: path to TADPOLE data
-            batch_size: batch size
-            out: path to save pickle file
-            validation: evaluate on validation subjects (instead of test subjects)
-        """
-        LOGGER.debug("Generating training and test datasets for fold {}".format(self.fold[3]))
+
+        LOGGER.debug("Generating training and test datasets for fold {}".format(self.fold_n))
 
         mask_frame = self.fold[0]
         train_mask, pred_mask, pred_mask_frame = misc.get_mask(

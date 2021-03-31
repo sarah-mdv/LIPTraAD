@@ -4,12 +4,13 @@
 The purpose of this module is to generate train, test, and validation sets
 """
 import argparse
-
+import os.path as path
 import numpy as np
 import pandas as pd
-
+import logging
 import src.misc as misc
 
+LOGGER = logging.getLogger(__name__)
 
 class FoldGen(object):
     def __init__(self, seed, datafile, features, nbfolds, outdir):
@@ -74,7 +75,7 @@ def split_by_median_date(data, subjects):
         first_half (ndarray): boolean mask, rows used as input
         second_half (ndarray): boolean mask, rows to predict
     """
-    first_half = np.zeros(data.shape[0], int)
+    first_half = np.ones(data.shape[0], int)
     second_half = np.zeros(data.shape[0], int)
     for rid in subjects:
         subj_mask = (data.RID == rid) & data.has_data
@@ -84,7 +85,7 @@ def split_by_median_date(data, subjects):
     return first_half, second_half
 
 
-def gen_fold(data, nb_folds, test_fold, folds, leftover, outdir):
+def gen_fold(data, nb_folds, test_fold, folds, leftover, outdir=""):
     """ Generate *nb_folds* cross-validation folds from *data """
     #We will end up with nb_train folds = nb_folds - 2, 1 test_fold, 2 val_fold
     val_fold = (test_fold + 1) % nb_folds
@@ -102,18 +103,20 @@ def gen_fold(data, nb_folds, test_fold, folds, leftover, outdir):
     val_mask = (np.in1d(data.RID, val_subj) & data.has_data).astype(int)
     test_mask = (np.in1d(data.RID, test_subj) & data.has_data).astype(int)
 
-    val_in_timepoints, val_out_timepoints = split_by_median_date(data, val_subj)
-    test_in_timepoints, test_out_timepoints = split_by_median_date(data, test_subj)
+    # val_in_timepoints, val_out_timepoints = split_by_median_date(data, val_subj)
+    # test_in_timepoints, test_out_timepoints = split_by_median_date(data, test_subj)
 
-    mask_frame = gen_mask_frame(data, train_mask, val_in_timepoints,
-                                test_in_timepoints)
-    #mask_frame.to_csv(path.join(outdir, 'fold%d_mask.csv' % test_fold), index=False)
+    mask_frame = gen_mask_frame(data, train_mask, val_mask,
+                                test_mask)
 
-    val_frame = gen_ref_frame(data, val_out_timepoints)
-    #val_frame.to_csv(path.join(outdir, 'fold%d_val.csv' % test_fold), index=False)
+    val_frame = gen_ref_frame(data, val_mask)
 
-    test_frame = gen_ref_frame(data, test_out_timepoints)
-    #test_frame.to_csv(path.join(outdir, 'fold%d_test.csv' % test_fold), index=False)
+    test_frame = gen_ref_frame(data, test_mask)
+    if outdir:
+        mask_frame.to_csv(path.join(outdir, 'fold%d_mask.csv' % test_fold), index=False)
+        val_frame.to_csv(path.join(outdir, 'fold%d_val.csv' % test_fold), index=False)
+        test_frame.to_csv(path.join(outdir, 'fold%d_test.csv' % test_fold), index=False)
+
     return mask_frame, val_frame, test_frame
 
 
