@@ -36,7 +36,6 @@ def ent_loss(pred, true, mask):
     o_true = pred.new_tensor(true.reshape(-1, 1)[mask], dtype=torch.long)
     o_pred = pred[pred.new_tensor(
         mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
-
     return torch.nn.functional.cross_entropy(
         o_pred, o_true, reduction='sum') / nb_subjects
 

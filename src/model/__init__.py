@@ -5,6 +5,7 @@ from typing import Dict, List
 from src.preprocess.dataloader_nguyen import DataSet
 from src.model.nguyen_classifier import RNNClassifier
 from src.model.k_means_classifier import RNNPrototypeClassifier
+from src.misc import load_feature
 
 import logging
 
@@ -39,8 +40,8 @@ class BaselineRunner(ABC):
     @abstractmethod
     def run(
             self,
-            dataset: DataSet,
-            validation_dataset,
+            fold,
+            fold_n,
             kwargs
     ) -> None:
         """
@@ -60,12 +61,13 @@ class RNNRunner(BaselineRunner):
 
     def run(
             self,
-            fold_dataset: DataSet,
-            validation_dataset,
+            fold,
+            fold_n,
             kwargs
     ):
+        fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
+                               load_feature(kwargs.features), strategy=kwargs.strategy, batch_size=kwargs.batch_size)
         self.classifier = RNNClassifier()
-        print(kwargs)
         self.pred_output = kwargs.out
         self.classifier.build_model(h_drop=kwargs.h_drop, h_size=kwargs.h_size,
                                     i_drop=kwargs.i_drop, nb_classes=3, nb_layers=kwargs.nb_layers,
@@ -73,6 +75,7 @@ class RNNRunner(BaselineRunner):
                                     mean=fold_dataset.mean, stds=fold_dataset.std)
         self.classifier.build_optimizer(kwargs.lr, kwargs.weight_decay)
         self.classifier.run(fold_dataset, epochs=kwargs.epochs, out=self.pred_output, predict=True)
+        return fold_dataset
 
 
 class RNNProRunner(BaselineRunner):
@@ -82,28 +85,41 @@ class RNNProRunner(BaselineRunner):
 
     def run(
             self,
-            fold_dataset: DataSet,
-            validation,
-            args
+            fold,
+            fold_n,
+            kwargs
     ):
         # Train the RNN classifier as a separate class
-        encoder_model = ""
+        encoder_model = kwargs.encoder_model
         if not encoder_model:
+            LOGGER.info('\n========== Start pretraining ==========')
+            LOGGER.debug("Generate dataset for encoder pretraining")
+            fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
+                                   load_feature(kwargs.features), fold_n=fold_n, strategy=kwargs.strategy,
+                                   batch_size=kwargs.batch_size)
             encoder = RNNClassifier()
             encoder.build_model(nb_classes=3, nb_measures=len(fold_dataset.train.value_fields()),
-                                h_size=args.h_size, i_drop=args.i_drop,
-                                h_drop=args.h_drop, nb_layers=args.nb_layers, mean=fold_dataset.mean,
+                                h_size=kwargs.h_size, i_drop=kwargs.i_drop,
+                                h_drop=kwargs.h_drop, nb_layers=kwargs.nb_layers, mean=fold_dataset.mean,
                                 stds=fold_dataset.std)
-            encoder.build_optimizer(args.lr, args.weight_decay)
-            LOGGER.info('========== Start pretraining ==========')
-            encoder.run(fold_dataset, epochs=args.pre_epochs, out=args.out)
-            LOGGER.info('========== End pretraining ==========\n')
+            encoder.build_optimizer(kwargs.lr, kwargs.weight_decay)
+            encoder.run(fold_dataset, epochs=kwargs.pre_epochs, out=kwargs.out)
+            LOGGER.info('\n========== End pretraining ==========')
             encoder_model = encoder.save_model()
-        self.classifier = RNNPrototypeClassifier(args.n_prototypes)
-        self.classifier.build_model(encoder_model=encoder_model, h_size=args.h_size,
-                                    n_jobs=args.n_jobs)
-        self.classifier.init_clusters(fold_dataset.train)
-
+        else:
+            encoder_model = kwargs.encoder_model
+        #New dataset with batch size of 1 so that we get 1 to 1 prototype to hidden state mapping
+        kmeans_dataset = DataSet(fold, kwargs.validation, kwargs.data,
+                                   load_feature(kwargs.features), fold_n=fold_n, strategy=kwargs.strategy,
+                                   batch_size=kwargs.batch_size)
+        self.classifier = RNNPrototypeClassifier(kwargs.n_prototypes)
+        self.classifier.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
+                                    n_jobs=kwargs.n_jobs)
+        #TODO add args here for learning rate and weight decay
+        self.classifier.fit(kmeans_dataset.train)
+        #self.classifier.output_prototypes(n_fold)
+        res_table = self.classifier.predict(kmeans_dataset, fold_n)
+        return kmeans_dataset
 
 REGISTERED_BASELINE_RUNNERS = [
     RNNRunner(),
@@ -117,12 +133,12 @@ RUNNERS_BY_NAME = {
 
 def run_from_name(
         classifier_name: str,
-        dataset: DataSet,
-        validation_dataset,
-        args
+        fold,
+        fold_n,
+        kwargs
 ):
     RUNNERS_BY_NAME[classifier_name].run(
-        dataset,
-        validation_dataset,
-        args
+        fold,
+        fold_n,
+        kwargs
     )
