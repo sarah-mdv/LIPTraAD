@@ -9,7 +9,7 @@ import torch.nn as nn
 from ignite.handlers import ModelCheckpoint
 
 from src.misc import DATA_DIR
-from src.preprocess.dataloader import DataSet
+from src.preprocess.dataloader_nguyen import DataSet
 
 LOGGER = logging.getLogger(__name__)
 

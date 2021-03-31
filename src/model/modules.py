@@ -66,6 +66,7 @@ class RnnModelInterp(torch.nn.Module):
         return i_mask, r_mask
     """
     Perform forwards prediction  and if latent=True return the hidden state at each time point
+    Returns n_tp x batch_size x hidden_size
     """
     def forward(self, _cat_seq, _val_seq, latent=False):
         out_cat_seq, out_val_seq = [], []
@@ -79,7 +80,6 @@ class RnnModelInterp(torch.nn.Module):
         for i, j in zip(range(len(val_seq)), range(1, len(val_seq))):
             o_cat, o_val, hidden = self.predict(cat_seq[i], val_seq[i], hidden,
                                                 masks)
-
             out_cat_seq.append(o_cat)
             out_val_seq.append(o_val)
 
@@ -89,9 +89,9 @@ class RnnModelInterp(torch.nn.Module):
 
             idx = np.isnan(cat_seq[j])
             cat_seq[j][idx] = o_cat.data.cpu().numpy()[idx]
-            hidden_batch.append(hidden[len(hidden) - 1].detach().cpu().numpy())
+            h = hidden[len(hidden) - 1].detach().cpu().numpy()
+            hidden_batch.append(h)
         if len(hidden_batch) != 0:
-            hidden_batch = np.vstack(hidden_batch)
             hidden_batch = np.array(hidden_batch)
         if latent:
             return hidden_batch
