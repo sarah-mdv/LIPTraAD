@@ -41,7 +41,7 @@ class BaselineRunner(ABC):
     def run(
             self,
             fold,
-            fold_n,
+            results_dir,
             kwargs
     ) -> None:
         """
@@ -62,7 +62,7 @@ class RNNRunner(BaselineRunner):
     def run(
             self,
             fold,
-            fold_n,
+            results_dir,
             kwargs
     ):
         fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
@@ -86,7 +86,7 @@ class RNNProRunner(BaselineRunner):
     def run(
             self,
             fold,
-            fold_n,
+            results_dir,
             kwargs
     ):
         # Train the RNN classifier as a separate class
@@ -95,7 +95,7 @@ class RNNProRunner(BaselineRunner):
             LOGGER.info('\n========== Start pretraining ==========')
             LOGGER.debug("Generate dataset for encoder pretraining")
             fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
-                                   load_feature(kwargs.features), fold_n=fold_n, strategy=kwargs.strategy,
+                                   load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
                                    batch_size=kwargs.batch_size)
             encoder = RNNClassifier()
             encoder.build_model(nb_classes=3, nb_measures=len(fold_dataset.train.value_fields()),
@@ -110,15 +110,15 @@ class RNNProRunner(BaselineRunner):
             encoder_model = kwargs.encoder_model
         #New dataset with batch size of 1 so that we get 1 to 1 prototype to hidden state mapping
         kmeans_dataset = DataSet(fold, kwargs.validation, kwargs.data,
-                                   load_feature(kwargs.features), fold_n=fold_n, strategy=kwargs.strategy,
+                                   load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
                                    batch_size=kwargs.batch_size)
         self.classifier = RNNPrototypeClassifier(kwargs.n_prototypes)
         self.classifier.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
                                     n_jobs=kwargs.n_jobs)
         #TODO add args here for learning rate and weight decay
-        self.classifier.fit(kmeans_dataset.train)
+        self.classifier.fit(kmeans_dataset.train, outdir=results_dir)
         #self.classifier.output_prototypes(n_fold)
-        res_table = self.classifier.predict(kmeans_dataset, fold_n)
+        res_table = self.classifier.predict(kmeans_dataset, fold[3], results_dir)
         return kmeans_dataset
 
 REGISTERED_BASELINE_RUNNERS = [
@@ -134,11 +134,11 @@ RUNNERS_BY_NAME = {
 def run_from_name(
         classifier_name: str,
         fold,
-        fold_n,
+        results_dir,
         kwargs
 ):
     RUNNERS_BY_NAME[classifier_name].run(
         fold,
-        fold_n,
+        results_dir,
         kwargs
     )

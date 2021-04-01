@@ -53,7 +53,7 @@ class RNNPrototypeClassifier(Classifier):
     Initialize clusters in self.kmeans after pre-training
     """
 
-    def fit(self, train_data: Random, lr=0.05, weight_decay=1e-5, epochs=5):
+    def fit(self, train_data: Random, lr=0.05, weight_decay=1e-5, epochs=5, outdir=""):
         LOGGER.debug("Initializing kmeans++ clusters with {} clusters".format(self.n_prototypes))
         #Store hidden_val length = n_batches
         hidden_val ={}
@@ -75,14 +75,13 @@ class RNNPrototypeClassifier(Classifier):
                 for i in range(len(batch["rids"])):
                     rid = torch.full((latent_x.shape[0], 1, 1), batch["rids"][i])
                     rids = rid if i == 0 else torch.cat((rids, rid), dim=1)
-                diags = torch.from_numpy(batch_data["true_cat"].astype(float))
-                mask = torch.from_numpy(batch_data["mask_cat"].astype(float))
-                #latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
-                #latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
+                diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
+                mask = torch.from_numpy(batch_data["mask_cat"].astype(np.float32))
+                latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
                 latent_x = torch.cat((rids, latent_x[:, :, :]), dim=2)
                 batch_data["hidden"] = latent_x
-                # Transform to batch_size x n_tp x hidden_size
-                # latent_x = torch.transpose(latent_x, 0, 1)
+
                 # Transform to (batch_size x n_tp) x hidden_size
                 latent_x = torch.flatten(latent_x, start_dim=0, end_dim=1)
                 self.batch_x.append(latent_x)
@@ -90,25 +89,27 @@ class RNNPrototypeClassifier(Classifier):
             batch_n += 1
         self.batch_x = torch.cat(self.batch_x, dim=0)
 
+
         #self.batch == (nb_patients x respective traj lens), (rid + DX + mask + hiddenstate)
 
-        self.model = self.model.fit(self.batch_x[:, 1:])
-        labels = self.model.labels_
-        LOGGER.debug(labels)
+        self.model = self.model.fit(self.batch_x[:, 3:])
 
-        prototype_list = self.get_prototypes()
-        prototype_hidden = (tup[1] for tup in prototype_list)
-        prototype_hidden = np.vstack(prototype_hidden)
-        prototype_hidden = np.array(prototype_hidden)
+        columns = ["RID", "DX", "DX_mask"] + ["hidden_"+str(i) for i in range(self.hidden_size)]
+        hidden_states = pd.DataFrame(self.batch_x.numpy(), columns=columns)
+        hidden_states["cluster"] = self.model.labels_
+        hidden_states.to_csv(outdir / "hidden_states.csv", index=False)
+
+        prototype_hidden = self.get_prototypes()
 
         self.prototype = Prototype(self.hidden_size, self.n_prototypes, 3, prototype_hidden)
         optimizer = torch.optim.Adam(self.prototype.parameters(), lr=lr, weight_decay=weight_decay)
+
         for i in range(epochs):
             tot_ent = 0
             tot_dp = 0
             for batch in hidden_val.values():
                 optimizer.zero_grad()
-                preds = self.prototype(batch["hidden"][:, :, 1:])
+                preds = self.prototype(batch["hidden"][:, :, 3:])
                 ent = ent_loss(preds, batch["true_cat"], batch["mask_cat"])
                 ent.backward()
                 batch_size = len(batch["true_cat"])
@@ -133,12 +134,15 @@ class RNNPrototypeClassifier(Classifier):
         for pr in range(self.n_prototypes):
             mask = np.array(self.model.labels_) == pr
             assigned = self.batch_x[mask]
-            dist_mat = self._parallel_compute_distance(assigned[:, 1:].numpy(), centers[pr])
+            dist_mat = self._parallel_compute_distance(assigned[:, 3:].numpy(), centers[pr])
             closest_dp = np.argmin(dist_mat)
             rid = assigned[closest_dp, 0]
-            hidden = assigned[closest_dp, 1:]
+            hidden = assigned[closest_dp, 3:]
             prototype_list[pr] = [int(rid), hidden]
-        return prototype_list
+        prototype_hidden = (tup[1] for tup in prototype_list)
+        prototype_hidden = np.vstack(prototype_hidden)
+        prototype_hidden = np.array(prototype_hidden)
+        return prototype_hidden
 
 
     def _parallel_compute_distance(self, x, cluster):
@@ -153,7 +157,7 @@ class RNNPrototypeClassifier(Classifier):
         self.optimizer = torch.optim.Adam(self.model.parameters(),
                                           lr=lr, weight_decay=weight_decay)
 
-    def predict(self, dataset:DataSet, fold_n:int, out="_prediction.csv"):
+    def predict(self, dataset:DataSet, fold_n:int, outdir):
         LOGGER.info("Predicting labels for fold {}".format(fold_n))
         data = dataset.test
 
@@ -186,8 +190,8 @@ class RNNPrototypeClassifier(Classifier):
         ret["RID"] = np.concatenate(ret["RID"])
         ret["DX_true"] = np.concatenate(ret["DX_true"])
         assert len(ret["DX"]) == len(ret["VISCODE"]) == len(ret["RID"])
-        out = "results/" + str(self.n_prototypes) + "_" + str(fold_n) + out
-        outpath = misc.LOG_DIR / Path(out)
+        out = "{}_{}_prediction.csv".format(str(self.n_prototypes), str(fold_n))
+        outpath = outdir / Path(out)
         return self.output_preds(ret, outpath)
 
     def output_preds(self, res, out):
@@ -203,7 +207,7 @@ class RNNPrototypeClassifier(Classifier):
         table.to_csv(out, index=False)
         return table
 
-    def predict_single_prototype(self, dataset: DataSet, fold_n:int, out="_prediction.csv"):
+    def predict_single_prototype(self, dataset: DataSet, fold_n:int, outdir):
         #Here predict using kmeans, then return final diagnosis of prototype
         LOGGER.info("Predicting labels for fold {}".format(fold_n))
         test_batch = []
@@ -235,8 +239,8 @@ class RNNPrototypeClassifier(Classifier):
                              "DX_pred":np.zeros(len(test_batch[:,0]))}, dtype=int)
         for i, cl in enumerate(cl_assignment):
             pred.at[i, "DX_pred"] = self.prototypes[cl]["cat"][-1]
-        out = str(self.n_prototypes) + "_" + str(fold_n) + out
-        outpath = misc.LOG_DIR / Path(out)
+        out = str(self.n_prototypes) + "_" + str(fold_n) + "_prediction.csv"
+        outpath = outdir / Path(out)
         LOGGER.info("The predictions have been output at {}".format(outpath))
         pred.to_csv(outpath)
         dataset.prediction = pred
