@@ -53,18 +53,18 @@ class RNNPrototypeClassifier(Classifier):
     Initialize clusters in self.kmeans after pre-training
     """
 
-    def fit(self, train_data: Random, lr=0.05, weight_decay=1e-5, epochs=5, outdir=""):
+    def fit(self, train_data: Random, lr=0.05, weight_decay=1e-5, epochs=5, hidden=True, outdir=""):
         LOGGER.debug("Initializing kmeans++ clusters with {} clusters".format(self.n_prototypes))
         #Store hidden_val length = n_batches
         hidden_val ={}
         batch_n = 0
         for batch in train_data:
             batch_data = {}
-            mask_cat = batch['cat_msk'][1:]
-            batch_data["mask_cat"] = mask_cat
+            batch_data["mask_cat"] = batch['cat_msk'][1:]
             batch_data["true_cat"] = batch['true_cat'][1:]
+            batch_data["tp"] = batch["tp"][1:]
 
-            assert mask_cat.sum() > 0
+            assert batch_data["mask_cat"].sum() > 0
 
             # latent_x shape: (n_tp, batch_size, hidden_size)
             latent_x = self.rnn_encoder(to_cat_seq(batch['cat']), batch['val'], latent=True)
@@ -77,12 +77,15 @@ class RNNPrototypeClassifier(Classifier):
                     rids = rid if i == 0 else torch.cat((rids, rid), dim=1)
                 diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
                 mask = torch.from_numpy(batch_data["mask_cat"].astype(np.float32))
+                tps = torch.from_numpy(batch_data["tp"].astype(np.float32))
                 latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
                 latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((tps, latent_x[:, :, :]), dim=2)
                 latent_x = torch.cat((rids, latent_x[:, :, :]), dim=2)
                 batch_data["hidden"] = latent_x
 
                 # Transform to (batch_size x n_tp) x hidden_size
+                latent_x = torch.transpose(latent_x, 0, 1)
                 latent_x = torch.flatten(latent_x, start_dim=0, end_dim=1)
                 self.batch_x.append(latent_x)
             hidden_val[batch_n] = batch_data
@@ -90,14 +93,9 @@ class RNNPrototypeClassifier(Classifier):
         self.batch_x = torch.cat(self.batch_x, dim=0)
 
 
-        #self.batch == (nb_patients x respective traj lens), (rid + DX + mask + hiddenstate)
+        # self.batch has dims (nb_patients x respective traj lens), (rid + DX + mask + hiddenstate)
 
-        self.model = self.model.fit(self.batch_x[:, 3:])
-
-        columns = ["RID", "DX", "DX_mask"] + ["hidden_"+str(i) for i in range(self.hidden_size)]
-        hidden_states = pd.DataFrame(self.batch_x.numpy(), columns=columns)
-        hidden_states["cluster"] = self.model.labels_
-        hidden_states.to_csv(outdir / "hidden_states.csv", index=False)
+        self.model = self.model.fit(self.batch_x[:, 4:])
 
         prototype_hidden = self.get_prototypes()
 
@@ -109,7 +107,7 @@ class RNNPrototypeClassifier(Classifier):
             tot_dp = 0
             for batch in hidden_val.values():
                 optimizer.zero_grad()
-                preds = self.prototype(batch["hidden"][:, :, 3:])
+                preds = self.prototype(batch["hidden"][:, :, 4:])
                 ent = ent_loss(preds, batch["true_cat"], batch["mask_cat"])
                 ent.backward()
                 batch_size = len(batch["true_cat"])
@@ -117,6 +115,8 @@ class RNNPrototypeClassifier(Classifier):
                 tot_dp += batch_size
                 optimizer.step()
             LOGGER.debug("Epoch {}/{} ENT loss: {}".format(i, epochs, tot_ent/tot_dp))
+
+        return self.hidden_state_frame() if hidden else None
         # for i, (prototype, tp, hidden) in enumerate(prototype_list):
         #     seq = train_data.data[prototype]['input']
         #     dict = {}
@@ -127,6 +127,13 @@ class RNNPrototypeClassifier(Classifier):
         #     self.prototypes[i] = dict
 
 
+    def hidden_state_frame(self):
+        columns = ["RID", "TP", "DX", "DX_mask"] + ["hidden_" + str(i) for i in range(self.hidden_size)]
+        hidden_states = pd.DataFrame(self.batch_x.numpy(), columns=columns)
+        hidden_states["cluster"] = self.model.labels_
+        #hidden_states.to_csv(outdir / "hidden_states.csv", index=False)
+        return hidden_states
+
     """Return list of prototype RIDs"""
     def get_prototypes(self):
         centers = self.model.cluster_centers_
@@ -134,10 +141,10 @@ class RNNPrototypeClassifier(Classifier):
         for pr in range(self.n_prototypes):
             mask = np.array(self.model.labels_) == pr
             assigned = self.batch_x[mask]
-            dist_mat = self._parallel_compute_distance(assigned[:, 3:].numpy(), centers[pr])
+            dist_mat = self._parallel_compute_distance(assigned[:, 4:].numpy(), centers[pr])
             closest_dp = np.argmin(dist_mat)
             rid = assigned[closest_dp, 0]
-            hidden = assigned[closest_dp, 3:]
+            hidden = assigned[closest_dp, 4:]
             prototype_list[pr] = [int(rid), hidden]
         prototype_hidden = (tup[1] for tup in prototype_list)
         prototype_hidden = np.vstack(prototype_hidden)
@@ -169,7 +176,7 @@ class RNNPrototypeClassifier(Classifier):
         ret["DX_true"] = []
         for batch in data:
             rid = batch['rid']
-            all_tp = batch['tp'].squeeze(axis=1)[1:]
+            all_tp = batch['tp'].squeeze(axis=1)[batch["dx_mask"]][1:]
             rids = np.repeat(rid, len(all_tp))
             icat = np.asarray(
                 [misc.to_categorical(c, 3) for c in batch['cat']])
@@ -179,10 +186,11 @@ class RNNPrototypeClassifier(Classifier):
             if len(latent_x) == 0:
                 continue
             preds = self.prototype(torch.from_numpy(latent_x))
-            ret["DX"].append(preds[:,0,:].detach().numpy())
+            preds = preds[batch["dx_mask"][1:],0,:].detach().numpy()
+            ret["DX"].append(preds)
             ret["VISCODE"].append(all_tp)
             ret["RID"].append(rids)
-            true = batch["cat"][1:].flatten()
+            true = batch["cat"][batch["dx_mask"]][1:]
             ret["DX_true"].append(true)
             assert preds.shape[0] == all_tp.shape[0]
         ret["DX"] = np.concatenate(ret["DX"], axis=0)

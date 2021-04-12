@@ -5,7 +5,7 @@ from typing import Dict, List
 from src.preprocess.dataloader_nguyen import DataSet
 from src.model.nguyen_classifier import RNNClassifier
 from src.model.k_means_classifier import RNNPrototypeClassifier
-from src.misc import load_feature
+from src.misc import load_feature, output_hidden_states
 
 import logging
 
@@ -116,7 +116,9 @@ class RNNProRunner(BaselineRunner):
         self.classifier.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
                                     n_jobs=kwargs.n_jobs)
         #TODO add args here for learning rate and weight decay
-        self.classifier.fit(kmeans_dataset.train, outdir=results_dir)
+        hidden_states = self.classifier.fit(kmeans_dataset.train, outdir=results_dir)
+        if hidden_states is not None:
+            output_hidden_states(hidden_states, kwargs.data, results_dir)
         #self.classifier.output_prototypes(n_fold)
         res_table = self.classifier.predict(kmeans_dataset, fold[3], results_dir)
         return kmeans_dataset
