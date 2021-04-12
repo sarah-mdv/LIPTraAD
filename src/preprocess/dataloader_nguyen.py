@@ -202,7 +202,7 @@ def extract(frame, strategy, features, defaults):
     """
     interp_fn = STRATEGIES[strategy]
 
-    fields = ['Month_bl', 'DX'] + features
+    fields = ['M', 'DX'] + features
     ret = dict()
     for rid, sframe in misc.get_data_dict(frame, features).items():
         #The indices are the visit months here
@@ -214,19 +214,17 @@ def extract(frame, strategy, features, defaults):
         Default start is 0, default step size is 1
         (this is to accommodate the 1 month step size expected by the TADPOLE challenge)
         """
-        xout = np.arange(xin[-1] - xin[0] + 1)
-
-        in_seqs = {'Month_bl': xin}
-        mk_seqs = {'Month_bl': np.zeros(len(xin), dtype=bool)}
-        th_seqs = {'Month_bl': np.full(len(xin), np.nan)}
+        xout = np.arange(0, xin[-1] - xin[0] + 1, 6)
+        in_seqs = {'M': xout}
+        mk_seqs = {'M': np.zeros(len(xout), dtype=bool)}
+        th_seqs = {'M': np.full(len(xout), np.nan)}
         for f in fields[1:]:
             yin = sframe[f].values
             in_seqs[f], mk_seqs[f], th_seqs[f] = interp_fn(
-                xin, yin, defaults[f], xin)
+                xin, yin, defaults[f], xout)
         ret[rid] = {'input': np.array([in_seqs[f] for f in fields]).T}
         ret[rid]['mask'] = np.array([mk_seqs[f] for f in fields]).T
         ret[rid]['truth'] = np.array([th_seqs[f] for f in fields]).T
-
         assert ret[rid]['input'].shape == ret[rid]['mask'].shape == ret[rid][
             'truth'].shape
     return ret, fields
@@ -247,7 +245,7 @@ class Sorted(object):
         self.idx = 0
 
         self.mask = {}
-        self.mask['tp'] = self.fields == 'Month_bl'
+        self.mask['tp'] = self.fields == 'M'
         self.mask['cat'] = self.fields == 'DX'
         self.mask['val'] = np.zeros(shape=self.fields.shape, dtype=bool)
         for field in self.attributes:
@@ -274,9 +272,12 @@ class Sorted(object):
 
         subj_data = {'rid': rid}
         seq = self.data[rid]['input']
+
         for k, mask in self.mask.items():
             subj_data[k] = seq[:, mask]
 
+        subj_data['dx_mask'] = self.data[rid]["mask"][:, 1]
+        subj_data['dx_truth'] = self.data[rid]["truth"][:, 1]
         return subj_data
 
     def value_fields(self):
@@ -356,6 +357,7 @@ class DataSet:
         self.validation = validation
         self.datafile = datafile
         self.features = features
+
         self.strategy = strategy
         self.batch_size = batch_size
 
@@ -381,7 +383,7 @@ class DataSet:
         self.baseline, self.pred_start = misc.get_baseline_prediction_start(
             pred_mask_frame)
 
-        columns = ['RID', 'Month_bl', 'DX'] + self.features
+        columns = ['RID', 'M', 'DX'] + self.features
         frame = misc.load_table(self.datafile, columns)
 
         tf = frame.loc[train_mask, self.features]

@@ -61,7 +61,7 @@ class FoldGen(object):
         mask_frame, val_frame, test_frame = gen_fold(
             self.data, self.nbfolds, self.curr_fold, self.folds, self.leftover, self.outdir)
         self.curr_fold += 1
-        return mask_frame, val_frame, test_frame, self.curr_fold
+        return mask_frame, val_frame, test_frame, self.curr_fold - 1
 
 
 #This function is leftover from Nguyen, I don't think it's useful though
