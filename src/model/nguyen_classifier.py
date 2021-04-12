@@ -2,16 +2,16 @@ import logging
 import time
 
 import numpy as np
+import pandas as pd
 import torch
-
+from datetime import datetime
 from pathlib import Path
 
 from src.model.classifier import Classifier
 from src.model.modules import MinimalRNN
-from src.preprocess.dataloader import (
+from src.preprocess.dataloader_nguyen import (
     DataSet,
     Random,
-    Sorted
 )
 from src import misc
 
@@ -27,7 +27,8 @@ class RNNClassifier(Classifier):
     def __init__(self):
         super().__init__("RNN")
 
-    def build_model(self, nb_classes, nb_measures, h_size, h_drop, i_drop, nb_layers, mean, stds):
+    def build_model(self, nb_classes, nb_measures, h_size,
+                    h_drop, i_drop, nb_layers, mean, stds):
         self.model = MinimalRNN(nb_classes=nb_classes, nb_measures=nb_measures, h_size=h_size,
                                 nb_layers=nb_layers, h_drop=h_drop, i_drop=i_drop)
         setattr(self.model, 'mean', mean)
@@ -73,20 +74,24 @@ class RNNClassifier(Classifier):
 
     def fit(self, data:DataSet, epochs: int, seed=0):
         super().fit(data, epochs)
+        date = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-        LOGGER.debug(self.model)
-
         start = time.time()
+        loss_table = {}
         try:
             for i in range(epochs):
                 loss = self.train_epoch(data.train)
                 log_info = (i + 1, epochs, misc.time_from(start)) + loss
-                LOGGER.info('%d/%d %s ENT %.3f, MAE %.3f' % log_info)
+                loss_table[i] = loss
+                LOGGER.info('Epoch: %d/%d %s ENT %.3f, MAE %.3f' % log_info)
         except KeyboardInterrupt:
             LOGGER.error('Early exit')
+        df = pd.DataFrame.from_dict(loss_table, orient='index', columns=["ENT", "MAE"])
+        df.to_csv(misc.LOG_DIR / Path(date + "_loss.csv"))
+
 
     def build_optimizer(self, lr, weight_decay):
         super().build_optimizer(lr, weight_decay)
@@ -95,9 +100,12 @@ class RNNClassifier(Classifier):
 
     def save_model(self):
         super().save_model()
-        out = misc.LOG_DIR / Path("{}_{}.pt".format(self.name, time))
+        t = time.localtime()
+        current_time = time.strftime("%H%M%S", t)
+        out = misc.LOG_DIR / Path("{}_{}.pt".format(self.name, current_time))
         torch.save(self.model, out)
         LOGGER.info("Model {} saved to {}".format(self.name, out))
+        return out
 
     def predict_subject(self, cat_seq, value_seq, time_seq):
         """
@@ -182,7 +190,8 @@ class RNNClassifier(Classifier):
         self.fit(data, epochs, seed)
 
         outpath = misc.LOG_DIR / Path(out)
-        data.prediction = misc.build_pred_frame(self.predict(data), outpath)
-        LOGGER.info("Predictions have been output at {}".format(outpath))
+        if predict:
+            data.prediction = misc.build_pred_frame(self.predict(data), outpath)
+            LOGGER.info("Predictions have been output at {}".format(outpath))
 
 
