@@ -105,12 +105,13 @@ def get_data_dict(frame, features):
     """
     ret = {}
     frame_ = frame.copy()
-    frame_['Month_bl'] = frame_['Month_bl'].round().astype(int)
+    frame_.drop(frame[frame.M == 3].index, inplace=True)
+    frame_['M'] = frame_['M'].round().astype(int)
     for subj in np.unique(frame_.RID):
-        subj_data = frame_[frame_.RID == subj].sort_values('Month_bl')
+        subj_data = frame_[frame_.RID == subj].sort_values('M')
         subj_data = subj_data[has_data_mask(subj_data[features])]
 
-        subj_data = subj_data.set_index('Month_bl', drop=True)
+        subj_data = subj_data.set_index('M', drop=True)
         ret[subj] = subj_data.drop(['RID'], axis=1)
     return ret
 
@@ -158,6 +159,27 @@ def build_pred_frame(prediction, outpath=None):
         table.to_csv(outpath, index=False)
 
     return table
+
+
+def output_hidden_states(hidden_states, datafile, results_dir, extra_info_fields=["DXCHANGE"]):
+    columns = ['RID', 'M', 'DX'] + extra_info_fields
+    frame = load_table(datafile, columns)
+    res_dict = get_data_dict(frame, extra_info_fields)
+    subjects = hidden_states["RID"].unique()
+    hidden_states = hidden_states.reindex(columns=hidden_states.columns.tolist() + extra_info_fields)
+    for s in subjects:
+        info = res_dict[s]
+        s_mask = (hidden_states.RID == s) & (hidden_states.DX_mask == 1)
+        #s_mask = s_hidden['DX_mask'] == 1
+        info = info.dropna(subset=["DX"])
+        try:
+            hidden_states.loc[s_mask, extra_info_fields] = np.array(info.loc[1:, extra_info_fields])
+        except ValueError:
+            continue
+    hidden_states = hidden_states.drop(hidden_states[hidden_states.TP == 0].index)
+    LOGGER.debug(hidden_states)
+    out = results_dir / "hidden_states.csv"
+    hidden_states.to_csv(out, index=False)
 
 
 def month_between(end, start):
@@ -260,9 +282,15 @@ def censor_d1_table(_table):
         8376, inplace=True)  # Duplicate row for subject 1088 at 72 months
     _table.drop(
         8586, inplace=True)  # Duplicate row for subject 1195 at 48 months
-    _table.loc[
-        12215,
-        'Month_bl'] = 48.  # Wrong EXAMDATE and Month_bl for subject 4960
+    # _table.loc[
+    #     12215,
+    #     'Month'] = 48.  # Wrong EXAMDATE and Month for subject 4960
+    # _table.loc[
+    #     264,
+    #     'Month'] = 6.  # Wrong EXAMDATE and Month for subject 98
+    # _table.loc[
+    #     769,
+    #     'Month'] = 6.  # Wrong EXAMDATE and Month for subject 314
     _table.drop(10254, inplace=True)  # Abnormaly small ICV for RID 4674
     _table.drop(12245, inplace=True)  # Row without measurements, subject 5204
 
