@@ -35,9 +35,9 @@ def main(args):
         folds = FoldGen(args.seed, args.data, args.features, args.folds, results_dir)
 
         #Generate datasets over folds and perform training and evaluation
-        for i, fold in enumerate(folds):
+        for fold in folds:
 
-            fold_dataset = run_from_name(args.model, fold, i, args)
+            fold_dataset = run_from_name(args.model, fold, results_dir, args)
             validation_dataset = fold[1] if args.validation else fold[2]
     return 0
 
