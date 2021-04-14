@@ -161,7 +161,7 @@ def build_pred_frame(prediction, outpath=None):
     return table
 
 
-def output_hidden_states(hidden_states, datafile, results_dir, extra_info_fields=["DXCHANGE"]):
+def output_hidden_states(hidden_states, datafile, results_dir, fold_n, extra_info_fields=["DXCHANGE"]):
     columns = ['RID', 'M', 'DX'] + extra_info_fields
     frame = load_table(datafile, columns)
     res_dict = get_data_dict(frame, extra_info_fields)
@@ -170,15 +170,15 @@ def output_hidden_states(hidden_states, datafile, results_dir, extra_info_fields
     for s in subjects:
         info = res_dict[s]
         s_mask = (hidden_states.RID == s) & (hidden_states.DX_mask == 1)
-        #s_mask = s_hidden['DX_mask'] == 1
         info = info.dropna(subset=["DX"])
         try:
             hidden_states.loc[s_mask, extra_info_fields] = np.array(info.loc[1:, extra_info_fields])
         except ValueError:
             continue
     hidden_states = hidden_states.drop(hidden_states[hidden_states.TP == 0].index)
-    LOGGER.debug(hidden_states)
-    out = results_dir / "hidden_states.csv"
+
+    out = results_dir / "fold_{}_hidden_states.csv".format(fold_n)
+    LOGGER.info("The hidden states have been output in file {}".format(out))
     hidden_states.to_csv(out, index=False)
 
 

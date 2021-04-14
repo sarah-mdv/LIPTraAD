@@ -68,6 +68,7 @@ class RNNPrototypeClassifier(Classifier):
 
             # latent_x shape: (n_tp, batch_size, hidden_size)
             latent_x = self.rnn_encoder(to_cat_seq(batch['cat']), batch['val'], latent=True)
+
             if len(latent_x) != 0:
                 latent_x = torch.from_numpy(latent_x)
                 rids = torch.empty((latent_x.shape[0], 1, 1))
@@ -75,15 +76,15 @@ class RNNPrototypeClassifier(Classifier):
                 for i in range(len(batch["rids"])):
                     rid = torch.full((latent_x.shape[0], 1, 1), batch["rids"][i])
                     rids = rid if i == 0 else torch.cat((rids, rid), dim=1)
-                diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
                 mask = torch.from_numpy(batch_data["mask_cat"].astype(np.float32))
+                diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
                 tps = torch.from_numpy(batch_data["tp"].astype(np.float32))
                 latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
                 latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
                 latent_x = torch.cat((tps, latent_x[:, :, :]), dim=2)
                 latent_x = torch.cat((rids, latent_x[:, :, :]), dim=2)
+                #LOGGER.debug("latent full {}".format(latent_x))
                 batch_data["hidden"] = latent_x
-
                 # Transform to (batch_size x n_tp) x hidden_size
                 latent_x = torch.transpose(latent_x, 0, 1)
                 latent_x = torch.flatten(latent_x, start_dim=0, end_dim=1)
@@ -114,7 +115,7 @@ class RNNPrototypeClassifier(Classifier):
                 tot_ent += ent * batch_size
                 tot_dp += batch_size
                 optimizer.step()
-            LOGGER.debug("Epoch {}/{} ENT loss: {}".format(i, epochs, tot_ent/tot_dp))
+            LOGGER.debug("Epoch {}/{} ENT loss: {}".format(i + 1, epochs, tot_ent/tot_dp))
 
         return self.hidden_state_frame() if hidden else None
         # for i, (prototype, tp, hidden) in enumerate(prototype_list):
@@ -131,7 +132,6 @@ class RNNPrototypeClassifier(Classifier):
         columns = ["RID", "TP", "DX", "DX_mask"] + ["hidden_" + str(i) for i in range(self.hidden_size)]
         hidden_states = pd.DataFrame(self.batch_x.numpy(), columns=columns)
         hidden_states["cluster"] = self.model.labels_
-        #hidden_states.to_csv(outdir / "hidden_states.csv", index=False)
         return hidden_states
 
     """Return list of prototype RIDs"""
@@ -139,14 +139,16 @@ class RNNPrototypeClassifier(Classifier):
         centers = self.model.cluster_centers_
         prototype_list = [None]*self.n_prototypes
         for pr in range(self.n_prototypes):
-            mask = np.array(self.model.labels_) == pr
+            # Only get time points that exist (not imputed values, check cat mask)
+            mask = (np.array(self.model.labels_) == pr) & (self.batch_x.numpy()[:, 3] == 1)
             assigned = self.batch_x[mask]
             dist_mat = self._parallel_compute_distance(assigned[:, 4:].numpy(), centers[pr])
             closest_dp = np.argmin(dist_mat)
             rid = assigned[closest_dp, 0]
+            tp = assigned[closest_dp, 1]
             hidden = assigned[closest_dp, 4:]
-            prototype_list[pr] = [int(rid), hidden]
-        prototype_hidden = (tup[1] for tup in prototype_list)
+            prototype_list[pr] = [int(rid), int(tp), hidden]
+        prototype_hidden = (tup[2] for tup in prototype_list)
         prototype_hidden = np.vstack(prototype_hidden)
         prototype_hidden = np.array(prototype_hidden)
         return prototype_hidden
@@ -170,12 +172,15 @@ class RNNPrototypeClassifier(Classifier):
 
         self.prototype.eval()
         ret = {"subjects": data.subjects}
-        ret["DX"] = []
-        ret["VISCODE"] = []
-        ret["RID"] = []
-        ret["DX_true"] = []
+        dx = []
+        viscode = []
+        RID = []
+        dx_true = []
+
         for batch in data:
             rid = batch['rid']
+
+            #Only save the time points that have ground truth
             all_tp = batch['tp'].squeeze(axis=1)[batch["dx_mask"]][1:]
             rids = np.repeat(rid, len(all_tp))
             icat = np.asarray(
@@ -187,20 +192,22 @@ class RNNPrototypeClassifier(Classifier):
                 continue
             preds = self.prototype(torch.from_numpy(latent_x))
             preds = preds[batch["dx_mask"][1:],0,:].detach().numpy()
-            ret["DX"].append(preds)
-            ret["VISCODE"].append(all_tp)
-            ret["RID"].append(rids)
+            dx.append(preds)
+            viscode.append(all_tp)
+            RID.append(rids)
             true = batch["cat"][batch["dx_mask"]][1:]
-            ret["DX_true"].append(true)
+            dx_true.append(true)
             assert preds.shape[0] == all_tp.shape[0]
-        ret["DX"] = np.concatenate(ret["DX"], axis=0)
-        ret["VISCODE"] = np.concatenate(ret["VISCODE"])
-        ret["RID"] = np.concatenate(ret["RID"])
-        ret["DX_true"] = np.concatenate(ret["DX_true"])
+
+        ret["DX"] = np.concatenate(dx, axis=0)
+        ret["VISCODE"] = np.concatenate(viscode)
+        ret["RID"] = np.concatenate(RID)
+        ret["DX_true"] = np.concatenate(dx_true)
         assert len(ret["DX"]) == len(ret["VISCODE"]) == len(ret["RID"])
+
         out = "{}_{}_prediction.csv".format(str(self.n_prototypes), str(fold_n))
-        outpath = outdir / Path(out)
-        return self.output_preds(ret, outpath)
+
+        return self.output_preds(ret, outdir / Path(out))
 
     def output_preds(self, res, out):
         table = pd.DataFrame()
@@ -213,6 +220,8 @@ class RNNPrototypeClassifier(Classifier):
         table['DX_pred'] = np.argmax(diag, axis=1)
         table['DX_true'] = res["DX_true"]
         table.to_csv(out, index=False)
+
+        LOGGER.info("Predictions output in file {}".format(out))
         return table
 
     def predict_single_prototype(self, dataset: DataSet, fold_n:int, outdir):

@@ -88,6 +88,7 @@ def split_by_median_date(data, subjects):
 def gen_fold(data, nb_folds, test_fold, folds, leftover, outdir=""):
     """ Generate *nb_folds* cross-validation folds from *data """
     #We will end up with nb_train folds = nb_folds - 2, 1 test_fold, 2 val_fold
+    LOGGER.info("Generating {} folds across data.".format(nb_folds))
     val_fold = (test_fold + 1) % nb_folds
     train_folds = [
         i for i in range(nb_folds) if (i != test_fold and i != val_fold)

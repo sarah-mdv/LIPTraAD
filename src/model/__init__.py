@@ -116,9 +116,9 @@ class RNNProRunner(BaselineRunner):
         self.classifier.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
                                     n_jobs=kwargs.n_jobs)
         #TODO add args here for learning rate and weight decay
-        hidden_states = self.classifier.fit(kmeans_dataset.train, outdir=results_dir)
-        if hidden_states is not None:
-            output_hidden_states(hidden_states, kwargs.data, results_dir)
+        hidden_states = self.classifier.fit(kmeans_dataset.train, hidden=kwargs.inter_res, outdir=results_dir)
+        if kwargs.inter_res:
+            output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3])
         #self.classifier.output_prototypes(n_fold)
         res_table = self.classifier.predict(kmeans_dataset, fold[3], results_dir)
         return kmeans_dataset

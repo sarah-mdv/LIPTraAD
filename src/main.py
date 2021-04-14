@@ -100,7 +100,6 @@ def get_args():
                         )
 
     #Model arguments
-    #ToDo:Add choices
     parser.add_argument('--model',
                         '-m',
                         required=True,

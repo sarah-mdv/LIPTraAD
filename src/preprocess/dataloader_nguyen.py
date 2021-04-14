@@ -204,6 +204,9 @@ def extract(frame, strategy, features, defaults):
 
     fields = ['M', 'DX'] + features
     ret = dict()
+    interval_size = 6
+
+    LOGGER.info("Imputing data with intervals of {} months.".format(interval_size))
     for rid, sframe in misc.get_data_dict(frame, features).items():
         #The indices are the visit months here
         xin = sframe.index.values
@@ -214,7 +217,7 @@ def extract(frame, strategy, features, defaults):
         Default start is 0, default step size is 1
         (this is to accommodate the 1 month step size expected by the TADPOLE challenge)
         """
-        xout = np.arange(0, xin[-1] - xin[0] + 1, 6)
+        xout = np.arange(0, xin[-1] - xin[0] + 1, interval_size)
         in_seqs = {'M': xout}
         mk_seqs = {'M': np.zeros(len(xout), dtype=bool)}
         th_seqs = {'M': np.full(len(xout), np.nan)}
@@ -375,7 +378,7 @@ class DataSet:
 
     def gen_data(self):
 
-        LOGGER.debug("Generating training and test datasets for fold {}".format(self.fold_n))
+        LOGGER.info("Generating training and test datasets for fold {}".format(self.fold_n))
 
         mask_frame = self.fold[0]
         train_mask, pred_mask, pred_mask_frame = misc.get_mask(
@@ -406,8 +409,8 @@ class DataSet:
         data = extract(frame[pred_mask], self.strategy, self.features, default_val)
         self.test = Sorted(data, 1, self.features)
 
-        LOGGER.info("Training datapoints {}".format(len(self.train.subjects)))
-        LOGGER.info("Testing datapoints {}".format(len(self.test.subjects)))
+        LOGGER.info("{} training datapoints.".format(len(self.train.subjects)))
+        LOGGER.info("{} testing datapoints.".format(len(self.test.subjects)))
         LOGGER.info("{} features".format(len(self.features)))
 
         LOGGER.debug("Features {}".format(self.features))
