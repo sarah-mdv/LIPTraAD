@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.model.classifier import Classifier
-from src.model.modules import MinimalRNN
+from src.model.rnn_modules import MinimalRNN
 from src.preprocess.dataloader_nguyen import (
     DataSet,
     Random,
