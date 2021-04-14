@@ -90,3 +90,37 @@ class LssCell(nn.Module):
         h = torch.addmm(self.bias, input, self.weight_i2h)
         h = torch.addmm(h, hx, self.weight_h2h)
         return h
+
+
+class MinimalDecoderRNNCell(nn.Module):
+    """A Minimal Decoder RNN cell .
+    Args:
+        hidden_size: The number of features in the hidden state `h`
+
+    Inputs: input, hidden
+        - hidden of shape `(batch, hidden_size)`: initial hidden state
+
+    Outputs: h'
+        - h' of shape `(batch, hidden_size)`: next hidden state
+    """
+
+    def __init__(self, hidden_size):
+        super(MinimalDecoderRNNCell, self).__init__()
+        self.hidden_size = hidden_size
+
+        self.weight_uh = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
+
+        self.bias_hh = nn.Parameter(torch.Tensor(hidden_size))
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1.0 / math.sqrt(self.hidden_size)
+        self.weight_uh.data.uniform_(-stdv, stdv)
+
+        self.bias_hh.data.uniform_(stdv)
+
+    def forward(self, hx):
+        u = torch.addmm(self.bias_hh, hx, self.weight_uh)
+        u = torch.sigmoid(u)
+        return u
