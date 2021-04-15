@@ -8,7 +8,7 @@ from sklearn.cluster import KMeans
 
 from src.model.classifier import Classifier
 from src.model.prototype import Prototype
-from src.preprocess.dataloader_nguyen import (
+from src.preprocess.dataloader import (
     DataSet,
     Random,
     Sorted

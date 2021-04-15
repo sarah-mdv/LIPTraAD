@@ -9,7 +9,7 @@ import torch.nn as nn
 from ignite.handlers import ModelCheckpoint
 
 from src.misc import DATA_DIR
-from src.preprocess.dataloader_nguyen import DataSet
+from src.preprocess.dataloader import DataSet
 
 LOGGER = logging.getLogger(__name__)
 
@@ -24,9 +24,6 @@ class Classifier(BaseClass):
         super().__init__()
         self.name = name
         self.model = None # type: nn.Module
-        self.score = None
-        self.max_length = None
-        self.cudnn = False
         self.optimizer = None
 
     def build_model(self, **kwargs) -> nn.Module:
@@ -45,28 +42,7 @@ class Classifier(BaseClass):
         :return:
         """
 
-    def create_weight_save_callback(self, path: Optional[str] = None) -> ModelCheckpoint:
-        """
-        Create an Ignite callback to save the model after each epoch.
-        Needs to be registered when starting to train the model.
-        :param path: path were to save the model weights
-        :return: ModelCheckpoint callback
-        """
-
-        if not path:
-            checkpoint_path = DATA_DIR / Path(
-                f"{self.name}-{datetime.now().strftime('%d-%m-%Y-%H-%M-%S')}-cp.ckpt"
-            )
-        else:
-            checkpoint_path = Path(path)
-
-        if not checkpoint_path.parent.exists():
-            checkpoint_path.parent.mkdir()
-
-        # Create a callback that saves the model's weights
-        return ModelCheckpoint(dirname=checkpoint_path.parent())
-
-    def fit(self, data:DataSet, epochs: int):
+    def fit(self, data:DataSet, epochs:int):
         """
         Start the training of the model with trainings data
         The methods build_model and build_optimizer should be called before this method

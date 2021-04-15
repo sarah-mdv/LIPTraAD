@@ -9,7 +9,7 @@ from pathlib import Path
 
 from src.model.classifier import Classifier
 from src.model.rnn_modules import MinimalRNN
-from src.preprocess.dataloader_nguyen import (
+from src.preprocess.dataloader import (
     DataSet,
     Random,
 )

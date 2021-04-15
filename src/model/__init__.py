@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List
 
-from src.preprocess.dataloader_nguyen import DataSet
+from src.preprocess.dataloader import DataSet
 from src.model.nguyen_classifier import RNNClassifier
 from src.model.k_means_classifier import RNNPrototypeClassifier
 from src.misc import load_feature, output_hidden_states
