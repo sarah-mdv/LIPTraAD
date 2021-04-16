@@ -98,11 +98,11 @@ class RNNClassifier(Classifier):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    def save_model(self):
+    def save_model(self, results_dir, ):
         super().save_model()
         t = time.localtime()
         current_time = time.strftime("%H%M%S", t)
-        out = misc.LOG_DIR / Path("{}_{}.pt".format(self.name, current_time))
+        out = results_dir / Path("{}_{}.pt".format(self.name, current_time))
         torch.save(self.model, out)
         LOGGER.info("Model {} saved to {}".format(self.name, out))
         return out

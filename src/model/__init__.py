@@ -65,8 +65,10 @@ class RNNRunner(BaselineRunner):
             results_dir,
             kwargs
     ):
+        LOGGER.debug("Running basic RNN model")
         fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
-                               load_feature(kwargs.features), strategy=kwargs.strategy, batch_size=kwargs.batch_size)
+                               load_feature(kwargs.features), fold_n=fold[3],
+                               strategy=kwargs.strategy, batch_size=kwargs.batch_size)
         self.classifier = RNNClassifier()
         self.pred_output = kwargs.out
         self.classifier.build_model(h_drop=kwargs.h_drop, h_size=kwargs.h_size,
@@ -89,14 +91,15 @@ class RNNProRunner(BaselineRunner):
             results_dir,
             kwargs
     ):
+        LOGGER.debug("Running prototype-similarity RNN model")
         # Train the RNN classifier as a separate class
         encoder_model = kwargs.encoder_model
+        fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
+                               load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
+                               batch_size=kwargs.batch_size)
         if not encoder_model:
-            LOGGER.info('\n========== Start pretraining ==========')
-            LOGGER.debug("Generate dataset for encoder pretraining")
-            fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
-                                   load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
-                                   batch_size=kwargs.batch_size)
+            LOGGER.info('\n============================ Start pretraining ============================')
+            LOGGER.debug("Generating dataset for encoder pretraining")
             encoder = RNNClassifier()
             encoder.build_model(nb_classes=3, nb_measures=len(fold_dataset.train.value_fields()),
                                 h_size=kwargs.h_size, i_drop=kwargs.i_drop,
@@ -104,28 +107,46 @@ class RNNProRunner(BaselineRunner):
                                 stds=fold_dataset.std)
             encoder.build_optimizer(kwargs.lr, kwargs.weight_decay)
             encoder.run(fold_dataset, epochs=kwargs.pre_epochs, out=kwargs.out)
-            LOGGER.info('\n========== End pretraining ==========')
-            encoder_model = encoder.save_model()
+            LOGGER.info('\n============================ End pretraining ============================')
+            encoder_model = encoder.save_model(results_dir)
         else:
             encoder_model = kwargs.encoder_model
         #New dataset with batch size of 1 so that we get 1 to 1 prototype to hidden state mapping
-        kmeans_dataset = DataSet(fold, kwargs.validation, kwargs.data,
-                                   load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
-                                   batch_size=kwargs.batch_size)
         self.classifier = RNNPrototypeClassifier(kwargs.n_prototypes)
         self.classifier.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
                                     n_jobs=kwargs.n_jobs)
         #TODO add args here for learning rate and weight decay
-        hidden_states = self.classifier.fit(kmeans_dataset.train, hidden=kwargs.inter_res, outdir=results_dir)
+        hidden_states = self.classifier.fit(fold_dataset.train, hidden=kwargs.inter_res, outdir=results_dir)
         if kwargs.inter_res:
             output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3])
         #self.classifier.output_prototypes(n_fold)
-        res_table = self.classifier.predict(kmeans_dataset, fold[3], results_dir)
-        return kmeans_dataset
+        res_table = self.classifier.predict(fold_dataset, fold[3], results_dir)
+        return fold_dataset
+
+
+class AutoencoderRunner(BaselineRunner):
+    @property
+    def name(self):
+        return "ae"
+
+    def run(
+            self,
+            fold,
+            results_dir,
+            kwargs
+    ):
+        LOGGER.debug("Running basic autoencoder model")
+        fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
+                               load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
+                               batch_size=kwargs.batch_size)
+
+        return 0
+
 
 REGISTERED_BASELINE_RUNNERS = [
     RNNRunner(),
-    RNNProRunner()
+    RNNProRunner(),
+    AutoencoderRunner()
 ]
 
 RUNNERS_BY_NAME = {

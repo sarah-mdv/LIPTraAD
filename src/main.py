@@ -36,9 +36,7 @@ def main(args):
 
         #Generate datasets over folds and perform training and evaluation
         for fold in folds:
-
-            fold_dataset = run_from_name(args.model, fold, results_dir, args)
-            validation_dataset = fold[1] if args.validation else fold[2]
+            run_from_name(args.model, fold, results_dir, args)
     return 0
 
 #ToDo: Add option to cache the data sets so we can reuse them easily
