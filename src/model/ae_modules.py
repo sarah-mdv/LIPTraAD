@@ -30,7 +30,11 @@ class AutoencoderModel(nn.Module):
         self.cells.append(celltype(nb_classes + nb_measures, h_size))
 
     def init_hidden_state(self, batch_size):
-        raise NotImplementedError
+        dev = next(self.parameters()).device
+        state = []
+        for cell in self.cells:
+            state.append(torch.zeros(batch_size, cell.hidden_size, device=dev))
+        return state
 
     def dropout_mask(self, batch_size):
         dev = next(self.parameters()).device
