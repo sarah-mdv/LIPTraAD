@@ -11,13 +11,22 @@ from src.model.cells import (
 
 LOGGER = logging.getLogger(__name__)
 
-class AutoencoderModel(nn.Module):
+def jozefowicz_init(forget_gate):
+    """
+    Initialize the forget gaste bias to 1
+    Args:
+        forget_gate: forget gate bias term
+    References: https://arxiv.org/abs/1602.02410
+    """
+    forget_gate.data.fill_(1)
+
+class Autoencoder(nn.Module):
     """
     RNN Autoencoder base class
     """
 
-    def __init__(self, celltype, nb_classes, nb_measures, h_size, **kwargs):
-        super(AutoencoderModel, self).__init__()
+    def __init__(self, fw_celltype, bw_celltype, nb_classes, nb_measures, h_size, **kwargs):
+        super(Autoencoder, self).__init__()
 
         self.h_ratio = 1. - kwargs['h_drop']
         self.i_ratio = 1. - kwargs['i_drop']
@@ -26,29 +35,24 @@ class AutoencoderModel(nn.Module):
         self.hid2category = nn.Linear(h_size, nb_classes)
         self.hid2measures = nn.Linear(h_size, nb_measures)
 
-        self.cells = nn.ModuleList()
-        self.cells.append(celltype(nb_classes + nb_measures, h_size))
+        self.fw_cell = fw_celltype(nb_classes + nb_measures, h_size)
+
+        self.bw_cell = bw_celltype(h_size)
 
     def init_hidden_state(self, batch_size):
         dev = next(self.parameters()).device
-        state = []
-        for cell in self.cells:
-            state.append(torch.zeros(batch_size, cell.hidden_size, device=dev))
-        return state
+
+        return torch.zeros(batch_size, self.fw_cell.hidden_size, device=dev)
 
     def dropout_mask(self, batch_size):
         dev = next(self.parameters()).device
         i_mask = torch.ones(
             batch_size, self.hid2measures.out_features, device=dev)
-        r_mask = [
-            torch.ones(batch_size, cell.hidden_size, device=dev)
-            for cell in self.cells
-        ]
+        r_mask = torch.ones(batch_size, self.fw_cell.hidden_size, device=dev)
 
         if self.training:
             i_mask.bernoulli_(self.i_ratio)
-            for mask in r_mask:
-                mask.bernoulli_(self.h_ratio)
+            r_mask.bernoulli_(self.h_ratio)
 
         return i_mask, r_mask
 
@@ -65,20 +69,56 @@ class AutoencoderModel(nn.Module):
         cat_seq = _cat_seq.copy()
         val_seq = _val_seq.copy()
         hidden_batch = []
-        for i, j in zip(range(len(val_seq)), range(1, len(val_seq))):
+        sequence_len = len(val_seq)
+        for i in range(sequence_len):
+            #o_cal, and o_val should have shapes tp x batch_size x #c or #v respectively
             o_cat, o_val, hidden = self.predict(cat_seq[i], val_seq[i], hidden,
-                                                masks)
+                                                masks, sequence_len)
 
-        for i, j in zip(range(len(val_seq)), range(1, len(val_seq))):
-            o_cat, o_val, hidden = self.predict(cat_seq[i], val_seq[i], hidden,
-                                                masks)
             out_cat_seq.append(o_cat)
             out_val_seq.append(o_val)
 
-            h = hidden[len(hidden) - 1].detach().cpu().numpy()
+            h = hidden.detach().cpu().numpy()
             hidden_batch.append(h)
         if len(hidden_batch) != 0:
             hidden_batch = np.array(hidden_batch)
-        if latent:
-            return hidden_batch
+
         return hidden_batch if latent else torch.stack(out_cat_seq), torch.stack(out_val_seq)
+
+
+class StandardAutoencoder(Autoencoder):
+    """Standard non-prototype Autoencoder"""
+    def __init__(self, **kwargs):
+        super(StandardAutoencoder, self).__init__(MinimalRNNCell, MinimalDecoderRNNCell, **kwargs)
+        jozefowicz_init(self.fw_cell.bias_hh)
+        jozefowicz_init(self.bw_cell.bias_hh)
+
+
+    def predict(self, i_cat, i_val, hid, masks, sequence_len):
+        out_cat_seq, out_val_seq = [], []
+
+        i_mask, r_mask = masks
+        next_hidden = torch.cat([hid.new(i_cat), hid.new(i_val) * i_mask],
+                        dim=-1)
+
+        next_hidden = self.fw_cell(next_hidden, hid * r_mask)
+
+        o_cat = nn.functional.softmax(self.hid2category(next_hidden), dim=-1)
+        o_val = self.hid2measures(next_hidden)
+
+        out_cat_seq.append(o_cat)
+        out_val_seq.append(o_val)
+
+        next_bw_hidden = next_hidden.clone()
+
+        for i in range(sequence_len - 1):
+            next_bw_hidden = self.bw_cell(next_bw_hidden)
+
+            o_cat = nn.functional.softmax(self.hid2category(next_bw_hidden), dim=-1)
+            o_val = self.hid2measures(next_bw_hidden)
+
+            out_cat_seq.append(o_cat)
+            out_val_seq.append(o_val)
+
+        # Return a chronologically ordered sequence (like input)
+        return torch.flip(torch.stack(out_cat_seq), [0]), torch.flip(torch.stack(out_val_seq), [0]), next_hidden
