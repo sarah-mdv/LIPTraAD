@@ -154,9 +154,9 @@ def get_args():
     parser.add_argument('--beta',
                         type=float,
                         default=.5)
-    parser.add_argument('--n_jobs',
+    parser.add_argument('--n_classes',
                         type=int,
-                        default=1)
+                        default=3)
     parser.add_argument('--log-interval', type=int, default=100,
                         help=('how many batches to wait before logging the '
                               'training status'))
