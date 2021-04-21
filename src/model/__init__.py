@@ -5,6 +5,7 @@ from typing import Dict, List
 from src.preprocess.dataloader import DataSet
 from src.model.nguyen_classifier import RNNClassifier
 from src.model.k_means_classifier import RNNPrototypeClassifier
+from src.model.standard_autoencoder import StandardAutoencoderModel
 from src.misc import load_feature, output_hidden_states
 
 import logging
@@ -19,7 +20,7 @@ LOGGER = logging.getLogger(__name__)
 
 class BaselineRunner(ABC):
     def __init__(self):
-        self.classifier = None
+        self.model = None
 
     @property
     def requires_embedding(self) -> bool:
@@ -69,14 +70,14 @@ class RNNRunner(BaselineRunner):
         fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
                                load_feature(kwargs.features), fold_n=fold[3],
                                strategy=kwargs.strategy, batch_size=kwargs.batch_size)
-        self.classifier = RNNClassifier()
+        self.model = RNNClassifier()
         self.pred_output = kwargs.out
-        self.classifier.build_model(h_drop=kwargs.h_drop, h_size=kwargs.h_size,
-                                    i_drop=kwargs.i_drop, nb_classes=3, nb_layers=kwargs.nb_layers,
+        self.model.build_model(h_drop=kwargs.h_drop, h_size=kwargs.h_size,
+                                    i_drop=kwargs.i_drop, nb_classes=kwargs.n_classes, nb_layers=kwargs.nb_layers,
                                     nb_measures=len(fold_dataset.train.value_fields()),
                                     mean=fold_dataset.mean, stds=fold_dataset.std)
-        self.classifier.build_optimizer(kwargs.lr, kwargs.weight_decay)
-        self.classifier.run(fold_dataset, epochs=kwargs.epochs, out=self.pred_output, predict=True)
+        self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
+        self.model.run(fold_dataset, epochs=kwargs.epochs, out=self.pred_output, predict=True)
         return fold_dataset
 
 
@@ -101,7 +102,7 @@ class RNNProRunner(BaselineRunner):
             LOGGER.info('\n============================ Start pretraining ============================')
             LOGGER.debug("Generating dataset for encoder pretraining")
             encoder = RNNClassifier()
-            encoder.build_model(nb_classes=3, nb_measures=len(fold_dataset.train.value_fields()),
+            encoder.build_model(nb_classes=kwargs.n_classes, nb_measures=len(fold_dataset.train.value_fields()),
                                 h_size=kwargs.h_size, i_drop=kwargs.i_drop,
                                 h_drop=kwargs.h_drop, nb_layers=kwargs.nb_layers, mean=fold_dataset.mean,
                                 stds=fold_dataset.std)
@@ -112,15 +113,16 @@ class RNNProRunner(BaselineRunner):
         else:
             encoder_model = kwargs.encoder_model
         #New dataset with batch size of 1 so that we get 1 to 1 prototype to hidden state mapping
-        self.classifier = RNNPrototypeClassifier(kwargs.n_prototypes)
-        self.classifier.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
+        self.model = RNNPrototypeClassifier(kwargs.n_prototypes)
+        self.model.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
                                     n_jobs=kwargs.n_jobs)
         #TODO add args here for learning rate and weight decay
-        hidden_states = self.classifier.fit(fold_dataset.train, hidden=kwargs.inter_res, outdir=results_dir)
+        hidden_states = self.model.fit(fold_dataset.train, hidden=kwargs.inter_res,epochs=kwargs.epochs,
+        outdir=results_dir)
         if kwargs.inter_res:
             output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3])
-        #self.classifier.output_prototypes(n_fold)
-        res_table = self.classifier.predict(fold_dataset, fold[3], results_dir)
+        #self.model.output_prototypes(n_fold)
+        res_table = self.model.predict(fold_dataset, fold[3], results_dir)
         return fold_dataset
 
 
@@ -139,7 +141,14 @@ class AutoencoderRunner(BaselineRunner):
         fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
                                load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
                                batch_size=kwargs.batch_size)
-
+        self.model = StandardAutoencoderModel(results_dir)
+        self.model.build_model(nb_classes=kwargs.n_classes, nb_measures=len(fold_dataset.train.value_fields()),
+                                h_size=kwargs.h_size, i_drop=kwargs.i_drop,
+                                h_drop=kwargs.h_drop, nb_layers=kwargs.nb_layers, mean=fold_dataset.mean,
+                                stds=fold_dataset.std)
+        self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
+        self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
+        self.model.predict(fold_dataset)
         return 0
 
 
