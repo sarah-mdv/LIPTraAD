@@ -51,7 +51,6 @@ class RNNPrototypeClassifier(Classifier):
     """
     Initialize clusters in self.kmeans after pre-training
     """
-
     def fit(self, train_data: Random, lr=0.05, weight_decay=1e-5, epochs=5, hidden=True, outdir=""):
         LOGGER.debug("Initializing kmeans++ clusters with {} clusters".format(self.n_prototypes))
         #Store hidden_val length = n_batches
