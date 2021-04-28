@@ -36,7 +36,7 @@ class Autoencoder(BaseClass):
         """
         pass
 
-   def fit(self, data:DataSet, epochs: int):
+    def fit(self, data:DataSet, epochs:int):
         """
         Start the training of the model with trainings data
         The methods build_model and build_optimizer should be called before this method

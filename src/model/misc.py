@@ -30,6 +30,7 @@ def ent_loss(pred, true, mask):
     assert isinstance(true, np.ndarray) and isinstance(mask, np.ndarray)
     nb_subjects = true.shape[1]
 
+
     pred = pred.reshape(pred.size(0) * pred.size(1), -1)
     mask = mask.reshape(-1, 1)
 
@@ -64,7 +65,7 @@ def mae_loss(pred, true, mask):
         pred, pred.new(true), reduction='sum') / nb_subjects
 
 
-def to_cat_seq(labels):
+def to_cat_seq(labels, nb_classes=3):
     """
     Return one-hot representation of a sequence of class labels
     Args:
@@ -72,5 +73,16 @@ def to_cat_seq(labels):
     Returns:
         [nb_subjects, nb_timpoints, nb_classes]
     """
-    return np.asarray([misc.to_categorical(c, 3) for c in labels])
+    return np.asarray([misc.to_categorical(c, nb_classes) for c in labels])
 
+def roll_mask(mask, shift):
+    curr_cat_mask = np.full(mask.shape, False)
+    curr_cat_mask[-(shift + 1):, :, :] = True
+
+    shifted_cat_mask = np.roll(mask, mask.shape[0] - (shift + 1), axis=0)
+
+    assert shifted_cat_mask.shape == mask.shape == curr_cat_mask.shape
+
+    curr_cat_mask = curr_cat_mask & shifted_cat_mask
+
+    return curr_cat_mask
