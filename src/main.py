@@ -116,6 +116,7 @@ def get_args():
     parser.add_argument('--lr',
                         type=float,
                         required=True,
+                        default=0.001,
                         help="Learning rate"
                         )
     parser.add_argument('--w_ent',
@@ -141,7 +142,7 @@ def get_args():
                         default=.0)
     parser.add_argument('--weight_decay',
                         type=float,
-                        default=.0)
+                        default=0.01)
     parser.add_argument('--n_prototypes',
                         type=int,
                         default=10)
