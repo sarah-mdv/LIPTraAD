@@ -113,10 +113,10 @@ def gen_fold(data, nb_folds, test_fold, folds, leftover, outdir=""):
     val_frame = gen_ref_frame(data, val_mask)
 
     test_frame = gen_ref_frame(data, test_mask)
-    if outdir:
-        mask_frame.to_csv(path.join(outdir, 'fold%d_mask.csv' % test_fold), index=False)
-        val_frame.to_csv(path.join(outdir, 'fold%d_val.csv' % test_fold), index=False)
-        test_frame.to_csv(path.join(outdir, 'fold%d_test.csv' % test_fold), index=False)
+    # if outdir:
+    #     mask_frame.to_csv(path.join(outdir, 'fold%d_mask.csv' % test_fold), index=False)
+    #     val_frame.to_csv(path.join(outdir, 'fold%d_val.csv' % test_fold), index=False)
+    #     test_frame.to_csv(path.join(outdir, 'fold%d_test.csv' % test_fold), index=False)
 
     return mask_frame, val_frame, test_frame
 

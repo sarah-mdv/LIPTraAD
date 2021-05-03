@@ -279,8 +279,12 @@ class Sorted(object):
         for k, mask in self.mask.items():
             subj_data[k] = seq[:, mask]
 
-        subj_data['dx_mask'] = self.data[rid]["mask"][:, 1]
-        subj_data['dx_truth'] = self.data[rid]["truth"][:, 1]
+        subj_data['dx_mask'] = self.data[rid]["mask"][:, self.mask['cat']]
+        subj_data['dx_truth'] = self.data[rid]["truth"][:,self.mask['cat']]
+
+        subj_data['val_mask'] = self.data[rid]["mask"][:, self.mask['val']]
+        subj_data['val_truth'] = self.data[rid]["truth"][:, self.mask['val']]
+
         return subj_data
 
     def value_fields(self):
