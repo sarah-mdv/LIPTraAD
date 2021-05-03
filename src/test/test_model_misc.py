@@ -41,13 +41,35 @@ class TestMisc(unittest.TestCase):
         self.mask = torch.zeros(self.shape_mask, dtype=torch.bool)
         self.mask[2:,1:,:] = True
 
+        self.false = torch.zeros(self.shape_mask, dtype=torch.bool)
+        self.all_true = torch.ones(self.shape_mask, dtype=torch.bool)
+
+        self.roll = [None]*5
+        self.roll[0] = torch.zeros(self.shape_mask, dtype=torch.bool)
+        self.roll[0][4:,:,:] = True
+
+        self.roll[1] = torch.zeros(self.shape_mask, dtype=torch.bool)
+        self.roll[1][3:, :, :] = True
+
+        self.roll[2] = torch.zeros(self.shape_mask, dtype=torch.bool)
+        self.roll[2][2:, :, :] = True
+
+        self.roll[3] = torch.zeros(self.shape_mask, dtype=torch.bool)
+        self.roll[3][1:, :, :] = True
+
+        self.roll[4] = torch.zeros(self.shape_mask, dtype=torch.bool)
+        self.roll[4][0:, :, :] = True
+
     def test_mask_roll(self):
         assert self.nb_tp == len(self.pred)
-        print(self.mask)
         for i in range(len(self.pred)):
-            rolled = roll_mask(self.mask, i)
-            print(rolled)
+            rolled = roll_mask(self.all_true, i)
+            assert torch.eq(torch.from_numpy(rolled), self.roll[i]).all()
 
+    def test_false_roll(self):
+        for i in range(self.nb_tp):
+            rolled = roll_mask(self.false, i)
+            assert not rolled.any()
 
 if __name__ == '__main__':
     unittest.main()

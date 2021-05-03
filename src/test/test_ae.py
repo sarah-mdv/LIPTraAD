@@ -15,7 +15,9 @@ from model.misc import (
     to_cat_seq,
     ent_loss,
     mae_loss,
-roll_mask
+    roll_mask,
+    print_model_parameters,
+    copy_model_params
 )
 
 from src import misc
@@ -27,7 +29,7 @@ class AETest(unittest.TestCase):
 
     def setUp(self):
         self.in_features = 1
-        self.batch_size = 64
+        self.batch_size = 1
         self.len = 100
         self.test_len = 1000
         self.seq_len = 4
@@ -39,11 +41,70 @@ class AETest(unittest.TestCase):
         self.lr = 0.0001
         self.weight_decay = 0.01
         self.epochs =10
+        self.w_ent = 1
+
+        self.cat_in = torch.zeros((self.seq_len, self.batch_size, 2))
+        self.cat_in[:,:,0] = 1.
+        self.true = np.zeros((self.seq_len, self.batch_size,1))
+        self.mask = np.ones((self.seq_len, self.batch_size,1))
+        self.val_in = torch.ones((self.seq_len, self.batch_size, 1))
 
         self.writer = SummaryWriter()
 
+    def test_return_sizes(self):
+        model = StandardAutoencoder(nb_classes=self.nb_classes, nb_measures=self.nb_measures, h_size=self.h_size,
+                                    h_drop=self.h_drop, i_drop=self.i_drop, )
 
-    def test_Autoencoder(self):
+        pred_cat, pred_val, hf, hb = model(self.cat_in, self.val_in, latent=True)
+
+        assert pred_cat.shape[0] == pred_cat.shape[1] == self.seq_len
+        assert pred_val.shape[0] == pred_val.shape[1] == self.seq_len
+
+
+    """
+    Assert that model weights and bias are changing after backpropagation
+    """
+    def test_parameters_change(self):
+        model = StandardAutoencoder(nb_classes=self.nb_classes, nb_measures=self.nb_measures, h_size=self.h_size,
+                                    h_drop=self.h_drop, i_drop=self.i_drop, )
+
+        before_params = copy_model_params(model)
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+
+        pred_cat, pred_val, hf, hb = model(self.cat_in, self.val_in, latent=True)
+
+
+        curr_cat_mask = np.full(self.mask.shape, True)
+        curr_val_mask = np.full(self.val_in.shape, True)
+
+        ent = ent_loss(pred_cat[pred_cat.shape[0] - 1].clone(), self.true, curr_cat_mask)
+        mae = mae_loss(pred_val[pred_cat.shape[0] - 1].clone(), self.val_in, curr_val_mask)
+        batch_loss = ent * self.w_ent + mae
+        batch_loss.backward()
+        optimizer.step()
+
+        after_params = model.parameters()
+
+        for b, a in zip(before_params, after_params):
+            assert (b.data != a.data).any()
+
+    def test_hidden_states_change(self):
+        model = StandardAutoencoder(nb_classes=self.nb_classes, nb_measures=self.nb_measures, h_size=self.h_size,
+                                    h_drop=self.h_drop, i_drop=self.i_drop, )
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+
+        masks = model.dropout_mask(self.batch_size)
+
+        hidden = model.init_hidden_state(self.val_in.shape[1])
+        for i in range(self.seq_len):
+            o_cat, o_val, hidden, hidden_bw = model.predict(self.cat_in[i], self.val_in[i], hidden, masks, self.seq_len)
+
+            print(o_cat)
+            assert (hidden != hidden_bw).any
+
+
+    def dont_test_Autoencoder(self):
 
         #Generate toy dataset of size nb_batches x nb_tp x batch_size, nb_measures
         train_cat = np.random.randint(self.nb_classes, size=(self.len, self.seq_len, self.batch_size, 1))
@@ -92,16 +153,6 @@ class AETest(unittest.TestCase):
 
             pred_cat, pred_val, hf, hb = model(torch.from_numpy(to_cat_seq(cat_in, self.nb_classes)),
                                                     torch.from_numpy(val_in), latent=True)
-            """
-            Are we learning the identity function at t or not
-            Look at the predictions at t
-
-            Check the gradients from the hidden state
-
-            Check with synthetic data on the model, does it learn simple patterns,
-            With deterministic output so that we know it should be learned
-
-            """
 
             batch_ent = batch_mae = 0
             for i in range(len(pred_cat)):
@@ -113,8 +164,8 @@ class AETest(unittest.TestCase):
                 assert cat_in.shape == curr_cat_mask.shape
                 assert val_in.shape == curr_val_mask.shape
 
-                true_cat = np.roll(cat_in, len(cat_in) - (i+1))
-                true_val = np.roll(val_in, len(val_in) - (i+1))
+                true_cat = np.roll(cat_in, len(cat_in) - (i+1), axis=0)
+                true_val = np.roll(val_in, len(val_in) - (i+1), axis=0)
 
                 batch_ent += ent_loss(pred_cat[i].clone(), true_cat, curr_cat_mask)
                 batch_mae += mae_loss(pred_val[i].clone(), true_val, curr_val_mask)
@@ -126,26 +177,6 @@ class AETest(unittest.TestCase):
             total_ent += batch_ent.item() * batch_size
             total_mae += batch_mae.item() * batch_size
             total_loss += batch_loss * batch_size
-        self.writer.add_scalar("Loss", total_loss/ (batch_size * cat.shape[0]), epoch)
-        self.writer.add_scalar("ENT", total_ent / (batch_size * cat.shape[0]), epoch)
-        self.writer.add_scalar("MAE", total_mae / (batch_size * cat.shape[0]), epoch)
-
-        self.writer.add_histogram("fw_cells.bias", model.fw_cell.bias_hh, epoch)
-        self.writer.add_histogram("fw_cells.weight_uh", model.fw_cell.weight_uh, epoch)
-        self.writer.add_histogram("fw_cells.weight_uh.grad", model.fw_cell.weight_uh.grad, epoch)
-
-        self.writer.add_histogram("bw_cells.bias", model.bw_cell.bias_hh, epoch)
-        self.writer.add_histogram("bw_cells.weight_uh", model.bw_cell.weight_uh, epoch)
-        self.writer.add_histogram("bw_cells.weight_uh.grad", model.bw_cell.weight_uh.grad, epoch)
-
-        self.writer.add_histogram("out_cat.bias", model.hid2category.bias, epoch)
-        self.writer.add_histogram("out_cat.weight", model.hid2category.weight, epoch)
-        self.writer.add_histogram("out_cat.weight.grad", model.hid2category.weight.grad, epoch)
-
-            # self.writer.add_histogram("out_val.bias", model.hid2measures.bias, epoch)
-            # self.writer.add_histogram("out_val.weight", model.hid2measures.weight, epoch)
-            # self.writer.add_histogram("out_val.weight.grad", model.hid2measures.weight.grad, epoch)
-
 
         return total_ent / (batch_size * cat.shape[0]), total_mae / (batch_size*cat.shape[0])
 
@@ -189,11 +220,9 @@ class AETest(unittest.TestCase):
 
                 pred = pred.reshape(pred.size(0) * pred.size(1), -1)
                 curr_cat_mask = curr_cat_mask.squeeze(1).astype(np.uint8)
-                #curr_cat_mask = curr_cat_mask.reshape(-1, 1)
 
                 o_true = pred.new_tensor(true_cat.reshape(-1, 1)[tp_mask], dtype=torch.long)
                 o_pred = pred[pred.new_tensor(curr_cat_mask, dtype=torch.bool)].reshape(i+1, -1)
-                #assert o_pred.shape[0] == tp.shape[0]
 
 
                 dx.append(o_pred.detach().numpy())
