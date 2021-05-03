@@ -66,7 +66,6 @@ class Autoencoder(nn.Module):
         out_cat_seq, out_val_seq = [], []
 
         hidden = self.init_hidden_state(_val_seq.shape[1])
-        masks = self.dropout_mask(_val_seq.shape[1])
 
         cat_seq = _cat_seq.clone().requires_grad_(True).float()
         val_seq = _val_seq.clone().requires_grad_(True).float()
@@ -116,8 +115,6 @@ class StandardAutoencoder(Autoencoder):
 
         out_cat_seq.append(o_cat)
         out_val_seq.append(o_val)
-
-        #next_bw_hidden = torch.tensor(next_hidden, requires_grad=True)
 
         next_bw_hidden = next_hidden.clone()
 

@@ -3,8 +3,9 @@ import time
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import balanced_accuracy_score
+
 import torch
-import torch.nn as nn
 from datetime import datetime
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
@@ -21,7 +22,10 @@ from src.model.misc import(
     ent_loss,
     mae_loss,
     to_cat_seq,
-    roll_mask
+    roll_mask,
+write_board,
+copy_model_params,
+check_model_params
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -30,7 +34,7 @@ class StandardAutoencoderModel(Autoencoder):
     def __init__(self, results_dir):
         super().__init__("StandardAE")
         self.results_dir = results_dir
-        self.writer = SummaryWriter()
+
 
 
     def build_model(self, nb_classes, nb_measures, h_size,
@@ -50,7 +54,11 @@ class StandardAutoencoderModel(Autoencoder):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    def train_epoch(self, dataset:Random, epoch, w_ent=4):
+        writer_name = "runs/lr= {}, weight_decay={}".format(lr, weight_decay)
+        self.writer = SummaryWriter(writer_name)
+
+
+    def train_epoch(self, dataset:Random, epoch, w_ent=1):
         """
         Train a recurrent model for 1 epoch
         Args:
@@ -62,9 +70,9 @@ class StandardAutoencoderModel(Autoencoder):
         """
 
         self.model.train()
-        total_ent = total_mae = 0
+        total_ent = total_mae = total_loss = 0
+        j = 0
         for batch in dataset:
-            torch.autograd.set_detect_anomaly(True)
             if len(batch['tp']) == 1:
                 continue
 
@@ -73,23 +81,15 @@ class StandardAutoencoderModel(Autoencoder):
             pred_cat, pred_val, hf, hb = self.model(torch.from_numpy(to_cat_seq(batch['cat'])),
                                                     torch.from_numpy(batch['val']),latent=True)
 
-
             mask_cat = batch['cat_msk']
             mask_val = batch['val_msk']
             assert mask_cat.sum() > 0
-            """
-            Are we learning the identity function at t or not
-            Look at the predictions at t
-
-            Check the gradients from the hidden state
-
-            Check with synthetic data on the model, does it learn simple patterns,
-            With deterministic output so that we know it should be learned
-
-            """
 
             batch_ent = batch_mae = 0
-            for i in range(len(pred_cat)):
+            nb_tp = len(pred_cat)
+            batch_cat_n_measurements = 0
+            batch_val_n_measurements = 0
+            for i in range(nb_tp):
 
                 curr_cat_mask = roll_mask(mask_cat, i)
                 curr_val_mask = roll_mask(mask_val, i)
@@ -97,43 +97,34 @@ class StandardAutoencoderModel(Autoencoder):
                 true_cat = np.roll(batch['true_cat'], len(batch['true_cat']) - (i+1), axis=0)
                 true_val = np.roll(batch['true_val'], len(batch['true_val']) - (i+1), axis=0)
 
+                cat_n_measurements = np.sum(curr_cat_mask)
+                val_n_measurements = np.sum(curr_val_mask)
+                batch_cat_n_measurements += cat_n_measurements
+                batch_val_n_measurements += val_n_measurements
+                # LOGGER.debug("Categorical number of measurements {}".format(cat_n_measurements))
+                # LOGGER.debug("Value number of measurements {}".format(val_n_measurements))
+
                 ent = ent_loss(pred_cat[i].clone(), true_cat, curr_cat_mask)
                 mae = mae_loss(pred_val[i].clone(), true_val, curr_val_mask)
-                batch_ent += ent
-                batch_mae += mae
-            total_loss = w_ent * batch_ent + batch_mae
-            total_loss.backward()
+
+                batch_ent += ent * cat_n_measurements
+                batch_mae += mae * val_n_measurements
+            batch_ent = batch_ent / batch_cat_n_measurements
+            batch_mae = batch_mae / batch_val_n_measurements
+            loss = w_ent * batch_ent + batch_mae
+            loss.backward()
             self.optimizer.step()
 
             batch_size = mask_cat.shape[1]
+            total_loss += loss.item() *batch_size
             total_ent += batch_ent.item() * batch_size
             total_mae += batch_mae.item() * batch_size
+            j +=1
 
         total_ent = (total_ent / len(dataset.subjects))
         total_mae = (total_mae / len(dataset.subjects))
-        self.writer.add_scalar("Loss", total_loss, epoch)
-        self.writer.add_scalar("ENT", total_ent, epoch)
-        self.writer.add_scalar("MAE", total_mae, epoch)
 
-        self.writer.add_histogram("in.bias", self.model.fw_cell.W.bias, epoch)
-        self.writer.add_histogram("in_weight", self.model.fw_cell.W.weight, epoch)
-        self.writer.add_histogram("in_weight.grad", self.model.fw_cell.W.weight.grad, epoch)
-
-        self.writer.add_histogram("fw_cells.bias", self.model.fw_cell.bias_hh, epoch)
-        self.writer.add_histogram("fw_cells.weight_uh", self.model.fw_cell.weight_uh, epoch)
-        self.writer.add_histogram("fw_cells.weight_uh.grad", self.model.fw_cell.weight_uh.grad, epoch)
-
-        self.writer.add_histogram("bw_cells.bias", self.model.bw_cell.bias_hh, epoch)
-        self.writer.add_histogram("bw_cells.weight_uh", self.model.bw_cell.weight_uh, epoch)
-        self.writer.add_histogram("bw_cells.weight_uh.grad", self.model.bw_cell.weight_uh.grad, epoch)
-
-        self.writer.add_histogram("out_cat.bias", self.model.hid2category.bias, epoch)
-        self.writer.add_histogram("out_cat.weight", self.model.hid2category.weight, epoch)
-        self.writer.add_histogram("out_cat.weight.grad", self.model.hid2category.weight.grad, epoch)
-
-        # self.writer.add_histogram("out_val.bias", self.model.hid2measures.bias, epoch)
-        # self.writer.add_histogram("out_val.weight", self.model.hid2measures.weight, epoch)
-        # self.writer.add_histogram("out_val.weight.grad", self.model.hid2measures.weight.grad, epoch)
+        write_board(self.writer, self.model, epoch, total_loss, total_ent, total_mae)
 
         return total_ent, total_mae
 
@@ -179,68 +170,96 @@ class StandardAutoencoderModel(Autoencoder):
         viscode = []
         RID = []
         dx_true = []
+        val = []
+        val_true = []
 
         for data in testdata:
             rid = data['rid']
-
-            mask_cat = data["dx_mask"].squeeze()
+            mask_cat = data["dx_mask"].squeeze(1)
             mask_val = data["val_mask"]
-
 
             icat = torch.from_numpy(np.asarray([misc.to_categorical(c, 3) for c in data['cat']]))
             ival = torch.from_numpy(data['val'][:, None, :])
             ocat, oval = self.model(icat, ival)
 
             all_tp = data['tp'].squeeze(axis=1)
-
             for i in range(len(all_tp)):
                 # Only save the time points that have ground truth
+                if mask_cat.size==0:
+                    print(ocat)
+                    continue
                 if not mask_cat[i]:
                     continue
 
-                pred = ocat[i]
-
                 curr_cat_mask = np.full(mask_cat.shape, False)
                 curr_cat_mask[-(i+1):] = True
+                curr_val_mask = np.full(mask_val.shape, False)
+                curr_val_mask[-(i+1):] = True
 
                 shifted_cat_mask = np.roll(mask_cat, len(mask_cat) - (i+1), axis= 0)
+                shifted_val_mask = np.roll(mask_val, len(mask_cat) - (i+1), axis= 0)
 
                 assert shifted_cat_mask.shape == mask_cat.shape == curr_cat_mask.shape
+                assert shifted_val_mask.shape == mask_val.shape == curr_val_mask.shape
 
 
                 curr_cat_mask = curr_cat_mask & shifted_cat_mask
+                curr_val_mask = curr_val_mask & shifted_val_mask
+
 
                 tp = np.roll(all_tp, len(mask_cat) - (i+1), axis=0)[curr_cat_mask]
                 rids = np.repeat(rid, len(tp))
 
                 true_cat = np.roll(data['dx_truth'], len(data['dx_truth']) - (i+1), axis=0)
+                true_val = np.roll(data['val'][:, :], len(data['val']) - (i+1), axis=0)
+
+                # Mask cat values
+                pred = ocat[i]
 
                 pred = pred.reshape(pred.size(0) * pred.size(1), -1)
                 curr_cat_mask = curr_cat_mask.reshape(-1, 1)
-
                 o_true = pred.new_tensor(true_cat.reshape(-1, 1)[curr_cat_mask], dtype=torch.long)
-                o_pred = pred[pred.new_tensor(
+                n_mask = pred.new_tensor(curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)
+                o_pred = pred[n_mask]
+
+                # Mask continuous variables
+                pred = oval[i].squeeze(1)
+                invalid = ~curr_val_mask
+                true_val[invalid] = 0
+                indices = pred.new_tensor(invalid.astype(np.uint8), dtype=torch.uint8)
+                pred[indices] = 0
+
+                o_true_val = true_val[torch.tensor(true_val).new_tensor(
+                    curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
+                o_pred_val = pred[pred.new_tensor(
                     curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
                 assert o_pred.shape[0] == tp.shape[0]
 
 
-                dx.append(o_pred.detach().numpy())
                 viscode.append(tp)
                 RID.append(rids)
+                dx.append(o_pred.detach().numpy())
                 dx_true.append(o_true.detach().numpy())
+                val_true.append(o_true_val)
+                val.append(o_pred_val.detach().numpy())
 
-        ret["DX"] = np.concatenate(dx, axis=0)
         ret["VISCODE"] = np.concatenate(viscode)
         ret["RID"] = np.concatenate(RID)
+        ret["DX"] = np.concatenate(dx, axis=0)
         ret["DX_true"] = np.concatenate(dx_true)
+        ret["Val"] = np.concatenate(val, axis=0)
+        ret["Val_true"] = np.concatenate(val_true, axis=0)
 
         assert len(ret["DX"]) == len(ret["VISCODE"]) == len(ret["RID"])
 
         out = "{}_prediction.csv".format(str(str(fold_n)))
 
-        return self.output_preds(ret, outdir / Path(out))
+        return self.output_preds(ret, testdata.attributes, outdir / Path(out))
 
-    def output_preds(self, res, out):
+    def output_preds(self, res, fields, out):
+        t1 = pd.DataFrame(res["Val"], columns=fields)
+        true_fields = [field + "_true" for field in fields]
+        t2 = pd.DataFrame(res["Val_true"], columns=true_fields)
         table = pd.DataFrame()
         table["RID"] = res["RID"]
         table["Forcast Month"] = res["VISCODE"]
@@ -250,7 +269,10 @@ class StandardAutoencoderModel(Autoencoder):
         table['AD relative probability'] = diag[:, 2]
         table['DX_pred'] = np.argmax(diag, axis=1)
         table['DX_true'] = res["DX_true"]
+        table = pd.concat([table, t1, t2], axis=1)
         table.to_csv(out, index=False)
+
+        LOGGER.info("The BAC is {}".format(balanced_accuracy_score(table["DX_pred"], table['DX_true'])))
 
         LOGGER.info("Predictions output in file {}".format(out))
         return table

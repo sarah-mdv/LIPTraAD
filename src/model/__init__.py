@@ -116,7 +116,6 @@ class RNNProRunner(BaselineRunner):
         self.model = RNNPrototypeClassifier(kwargs.n_prototypes)
         self.model.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
                                     n_jobs=kwargs.n_jobs)
-        #TODO add args here for learning rate and weight decay
         hidden_states = self.model.fit(fold_dataset.train, hidden=kwargs.inter_res,epochs=kwargs.epochs,
         outdir=results_dir)
         if kwargs.inter_res:
@@ -144,11 +143,11 @@ class AutoencoderRunner(BaselineRunner):
         self.model = StandardAutoencoderModel(results_dir)
         self.model.build_model(nb_classes=kwargs.n_classes, nb_measures=len(fold_dataset.train.value_fields()),
                                 h_size=kwargs.h_size, i_drop=kwargs.i_drop,
-                                h_drop=kwargs.h_drop, nb_layers=kwargs.nb_layers, mean=fold_dataset.mean,
+                                h_drop=kwargs.h_drop, mean=fold_dataset.mean,
                                 stds=fold_dataset.std)
         self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
         self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
-        self.model.predict(fold_dataset)
+        self.model.predict(fold_dataset, fold[3], results_dir)
         return 0
 
 

@@ -86,3 +86,28 @@ def roll_mask(mask, shift):
     curr_cat_mask = curr_cat_mask & shifted_cat_mask
 
     return curr_cat_mask
+
+def write_board(writer, model, epoch, loss, ent, mae):
+    writer.add_scalar("Loss", loss, epoch)
+    writer.add_scalar("ENT", ent, epoch)
+    writer.add_scalar("MAE", mae, epoch)
+
+    for name, weight in model.named_parameters():
+        writer.add_histogram(name, weight, epoch)
+        writer.add_histogram("{}.grad".format(name), weight.grad, epoch)
+
+
+def print_model_parameters(model):
+    for parameter in model.parameters():
+        print(parameter.shape)
+        print(parameter)
+
+def copy_model_params(model):
+    params = []
+    for parameter in model.parameters():
+        params.append(parameter.clone().detach())
+    return params
+
+def check_model_params(model, params):
+    for b, a in zip(params, model.parameters()):
+        assert (b.data != a.data).any()
