@@ -20,7 +20,8 @@ from src.preprocess.dataloader import (
 
 def main(args):
     #Setup results dir
-    datetime_now = datetime.now().strftime("%d%m%y-%H%M%S")
+    datetime_now = datetime.now().strftime("%d%m%y-%H%M%S_lṛ_{}_wd_{}_bs_{}".format(args.lr, args.weight_decay,
+                                                                                    args.batch_size))
     results_dir = LOG_DIR / "results" / datetime_now
     results_dir.mkdir(parents=True)
 
@@ -56,7 +57,7 @@ def get_args():
     parser.add_argument(
         '--seed',
         type=int,
-        default=0,
+        default=1,
         help="Seed for generating random data throughout the pipeline"
     )
     parser.add_argument(
@@ -105,7 +106,7 @@ def get_args():
                         )
     parser.add_argument('--epochs',
                         type=int,
-                        required=True,
+                        default=10,
                         help="Number of epochs to train"
                         )
     parser.add_argument('--pre_epochs',
@@ -131,15 +132,15 @@ def get_args():
                         )
     parser.add_argument('--h_size',
                         type=int,
-                        default=512,
+                        default=128,
                         help="Hidden size"
                         )
     parser.add_argument('--i_drop',
                         type=float,
-                        default=.0)
+                        default=.1)
     parser.add_argument('--h_drop',
                         type=float,
-                        default=.0)
+                        default=.4)
     parser.add_argument('--weight_decay',
                         type=float,
                         default=0.01)
@@ -158,9 +159,6 @@ def get_args():
     parser.add_argument('--n_classes',
                         type=int,
                         default=3)
-    parser.add_argument('--log-interval', type=int, default=100,
-                        help=('how many batches to wait before logging the '
-                              'training status'))
 
     return parser.parse_args()
 
