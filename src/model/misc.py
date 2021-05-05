@@ -38,7 +38,7 @@ def ent_loss(pred, true, mask):
     o_pred = pred[pred.new_tensor(
         mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
     return torch.nn.functional.cross_entropy(
-        o_pred, o_true, reduction='sum') / nb_subjects
+        o_pred, o_true, reduction='mean')
 
 
 def mae_loss(pred, true, mask):
@@ -62,7 +62,7 @@ def mae_loss(pred, true, mask):
     pred[indices] = 0
 
     return torch.nn.functional.l1_loss(
-        pred, pred.new(true), reduction='sum') / nb_subjects
+        pred, pred.new(true), reduction='mean')
 
 
 def to_cat_seq(labels, nb_classes=3):
