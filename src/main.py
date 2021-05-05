@@ -3,7 +3,6 @@ import argparse
 import json
 from datetime import datetime
 
-from src.evaluation.evaluate import evaluate
 from src.model import run_from_name
 from src.preprocess.fold_generator import FoldGen
 
@@ -36,11 +35,13 @@ def main(args):
         folds = FoldGen(args.seed, args.data, args.features, args.folds, results_dir)
 
         #Generate datasets over folds and perform training and evaluation
+        fold_bac = 0
         for fold in folds:
-            run_from_name(args.model, fold, results_dir, args)
+            fold_bac += run_from_name(args.model, fold, results_dir, args)
+        bac = fold_bac / folds
+        LOGGER.info("BAC over {} folds: {}".format(folds, bac))
     return 0
 
-#ToDo: Add option to cache the data sets so we can reuse them easily
 def get_args():
     parser = argparse.ArgumentParser()
 

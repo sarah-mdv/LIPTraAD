@@ -147,8 +147,7 @@ class AutoencoderRunner(BaselineRunner):
                                 stds=fold_dataset.std)
         self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
         self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
-        self.model.predict(fold_dataset, fold[3], results_dir)
-        return 0
+        return self.model.predict(fold_dataset, fold[3], results_dir)
 
 
 REGISTERED_BASELINE_RUNNERS = [
@@ -168,7 +167,7 @@ def run_from_name(
         results_dir,
         kwargs
 ):
-    RUNNERS_BY_NAME[classifier_name].run(
+    return RUNNERS_BY_NAME[classifier_name].run(
         fold,
         results_dir,
         kwargs

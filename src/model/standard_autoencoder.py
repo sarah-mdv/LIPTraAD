@@ -173,16 +173,16 @@ class StandardAutoencoderModel(Autoencoder):
         val = []
         val_true = []
 
-        for data in testdata:
-            rid = data['rid']
-            mask_cat = data["dx_mask"].squeeze(1)
-            mask_val = data["val_mask"]
+        for d in testdata:
+            rid = d['rid']
+            mask_cat = d["dx_mask"].squeeze(1)
+            mask_val = d["val_mask"]
 
-            icat = torch.from_numpy(np.asarray([misc.to_categorical(c, 3) for c in data['cat']]))
-            ival = torch.from_numpy(data['val'][:, None, :])
+            icat = torch.from_numpy(np.asarray([misc.to_categorical(c, 3) for c in d['cat']]))
+            ival = torch.from_numpy(d['val'][:, None, :])
             ocat, oval = self.model(icat, ival)
 
-            all_tp = data['tp'].squeeze(axis=1)
+            all_tp = d['tp'].squeeze(axis=1)
             for i in range(len(all_tp)):
                 # Only save the time points that have ground truth
                 if mask_cat.size==0:
@@ -210,8 +210,8 @@ class StandardAutoencoderModel(Autoencoder):
                 tp = np.roll(all_tp, len(mask_cat) - (i+1), axis=0)[curr_cat_mask]
                 rids = np.repeat(rid, len(tp))
 
-                true_cat = np.roll(data['dx_truth'], len(data['dx_truth']) - (i+1), axis=0)
-                true_val = np.roll(data['val'][:, :], len(data['val']) - (i+1), axis=0)
+                true_cat = np.roll(d['dx_truth'], len(d['dx_truth']) - (i+1), axis=0)
+                true_val = np.roll(d['val'][:, :], len(d['val']) - (i+1), axis=0)
 
                 # Mask cat values
                 pred = ocat[i]
@@ -254,12 +254,13 @@ class StandardAutoencoderModel(Autoencoder):
 
         out = "{}_prediction.csv".format(str(str(fold_n)))
 
-        return self.output_preds(ret, testdata.attributes, outdir / Path(out))
+        return self.output_preds(ret, testdata.attributes, outdir / Path(out), data.mean, data.std)
 
-    def output_preds(self, res, fields, out):
-        t1 = pd.DataFrame(res["Val"], columns=fields)
+    def output_preds(self, res, fields, out, mean, std):
+        t1 = pd.DataFrame(res["Val"], columns=fields) * std + mean
         true_fields = [field + "_true" for field in fields]
-        t2 = pd.DataFrame(res["Val_true"], columns=true_fields)
+        t2 = pd.DataFrame(res["Val_true"], columns=fields) * std + mean
+        t2.columns = true_fields
         table = pd.DataFrame()
         table["RID"] = res["RID"]
         table["Forcast Month"] = res["VISCODE"]
@@ -272,10 +273,11 @@ class StandardAutoencoderModel(Autoencoder):
         table = pd.concat([table, t1, t2], axis=1)
         table.to_csv(out, index=False)
 
-        LOGGER.info("The BAC is {}".format(balanced_accuracy_score(table["DX_pred"], table['DX_true'])))
+        bac = balanced_accuracy_score(table["DX_pred"], table['DX_true'])
+        LOGGER.info("The BAC is {}".format(bac))
 
         LOGGER.info("Predictions output in file {}".format(out))
-        return table
+        return bac
 
     def save_model(self):
         super().save_model()
