@@ -161,7 +161,8 @@ def build_pred_frame(prediction, outpath=None):
     return table
 
 
-def output_hidden_states(hidden_states, datafile, results_dir, fold_n, extra_info_fields=["DXCHANGE"]):
+def output_hidden_states(hidden_states, datafile, results_dir, fold_n, first_data_point = 1, extra_info_fields=[
+    "DXCHANGE"]):
     columns = ['RID', 'M', 'DX'] + extra_info_fields
     frame = load_table(datafile, columns)
     res_dict = get_data_dict(frame, extra_info_fields)
@@ -172,7 +173,8 @@ def output_hidden_states(hidden_states, datafile, results_dir, fold_n, extra_inf
         s_mask = (hidden_states.RID == s) & (hidden_states.DX_mask == 1)
         info = info.dropna(subset=["DX"])
         try:
-            hidden_states.loc[s_mask, extra_info_fields] = np.array(info.loc[1:, extra_info_fields])
+
+            hidden_states.loc[s_mask, extra_info_fields] = np.array(info.loc[first_data_point:, extra_info_fields])
         except ValueError:
             continue
     hidden_states = hidden_states.drop(hidden_states[hidden_states.TP == 0].index)

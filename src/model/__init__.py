@@ -114,8 +114,7 @@ class RNNProRunner(BaselineRunner):
             encoder_model = kwargs.encoder_model
         #New dataset with batch size of 1 so that we get 1 to 1 prototype to hidden state mapping
         self.model = RNNPrototypeClassifier(kwargs.n_prototypes)
-        self.model.build_model(encoder_model=encoder_model, h_size=kwargs.h_size,
-                                    n_jobs=kwargs.n_jobs)
+        self.model.build_model(encoder_model=encoder_model, h_size=kwargs.h_size)
         hidden_states = self.model.fit(fold_dataset.train, hidden=kwargs.inter_res,epochs=kwargs.epochs,
         outdir=results_dir)
         if kwargs.inter_res:
@@ -147,6 +146,12 @@ class AutoencoderRunner(BaselineRunner):
                                 stds=fold_dataset.std)
         self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
         self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
+        hidden_states = self.model.collect_hidden_states(fold_dataset)
+        if kwargs.inter_res:
+            output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3], first_data_point = 0,
+                                 extra_info_fields=["DXCHANGE", "AGE", "MMSE", "ABETA_UPENNBIOMK9_04_19_17",
+                                                    "PTGENDER"])
+
         return self.model.predict(fold_dataset, fold[3], results_dir)
 
 

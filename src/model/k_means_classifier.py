@@ -38,7 +38,7 @@ class RNNPrototypeClassifier(Classifier):
         self.batch_similarity = []
         self.prototype = None
 
-    def build_model(self, encoder_model, h_size, n_jobs, beta=1):
+    def build_model(self, encoder_model, h_size, beta=1):
         self.beta = beta
         self.hidden_size = h_size
 
@@ -54,46 +54,11 @@ class RNNPrototypeClassifier(Classifier):
     def fit(self, train_data: Random, lr=0.05, weight_decay=1e-5, epochs=5, hidden=True, outdir=""):
         LOGGER.debug("Initializing kmeans++ clusters with {} clusters".format(self.n_prototypes))
         #Store hidden_val length = n_batches
-        hidden_val ={}
-        batch_n = 0
-        for batch in train_data:
-            batch_data = {}
-            batch_data["mask_cat"] = batch['cat_msk'][1:]
-            batch_data["true_cat"] = batch['true_cat'][1:]
-            batch_data["tp"] = batch["tp"][1:]
-
-            assert batch_data["mask_cat"].sum() > 0
-
-            # latent_x shape: (n_tp, batch_size, hidden_size)
-            latent_x = self.rnn_encoder(to_cat_seq(batch['cat']), batch['val'], latent=True)
-
-            if len(latent_x) != 0:
-                latent_x = torch.from_numpy(latent_x)
-                rids = torch.empty((latent_x.shape[0], 1, 1))
-                # Attach rids to hidden states so real values can be retrieved
-                for i in range(len(batch["rids"])):
-                    rid = torch.full((latent_x.shape[0], 1, 1), batch["rids"][i])
-                    rids = rid if i == 0 else torch.cat((rids, rid), dim=1)
-                mask = torch.from_numpy(batch_data["mask_cat"].astype(np.float32))
-                diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
-                tps = torch.from_numpy(batch_data["tp"].astype(np.float32))
-                latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
-                latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
-                latent_x = torch.cat((tps, latent_x[:, :, :]), dim=2)
-                latent_x = torch.cat((rids, latent_x[:, :, :]), dim=2)
-                #LOGGER.debug("latent full {}".format(latent_x))
-                batch_data["hidden"] = latent_x
-                # Transform to (batch_size x n_tp) x hidden_size
-                latent_x = torch.transpose(latent_x, 0, 1)
-                latent_x = torch.flatten(latent_x, start_dim=0, end_dim=1)
-                self.batch_x.append(latent_x)
-            hidden_val[batch_n] = batch_data
-            batch_n += 1
+        hidden_val = self.collect_hidden_states(train_data)
         self.batch_x = torch.cat(self.batch_x, dim=0)
 
 
         # self.batch has dims (nb_patients x respective traj lens), (rid + DX + mask + hiddenstate)
-
         self.model = self.model.fit(self.batch_x[:, 4:])
 
         prototype_hidden = self.get_prototypes()
@@ -125,6 +90,43 @@ class RNNPrototypeClassifier(Classifier):
         #         dict[k] = seq[:tp, mask]
         #     self.prototypes[i] = dict
 
+    def collect_hidden_states(self, train_data):
+        hidden_val = {}
+        batch_n = 0
+        for batch in train_data:
+            batch_data = {}
+            batch_data["mask_cat"] = batch['cat_msk'][1:]
+            batch_data["true_cat"] = batch['true_cat'][1:]
+            batch_data["tp"] = batch["tp"][1:]
+
+            assert batch_data["mask_cat"].sum() > 0
+
+            # latent_x shape: (n_tp, batch_size, hidden_size)
+            latent_x = self.rnn_encoder(to_cat_seq(batch['cat']), batch['val'], latent=True)
+
+            if len(latent_x) != 0:
+                latent_x = torch.from_numpy(latent_x)
+                rids = torch.empty((latent_x.shape[0], 1, 1))
+                # Attach rids to hidden states so real values can be retrieved
+                for i in range(len(batch["rids"])):
+                    rid = torch.full((latent_x.shape[0], 1, 1), batch["rids"][i])
+                    rids = rid if i == 0 else torch.cat((rids, rid), dim=1)
+                mask = torch.from_numpy(batch_data["mask_cat"].astype(np.float32))
+                diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
+                tps = torch.from_numpy(batch_data["tp"].astype(np.float32))
+                latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((tps, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((rids, latent_x[:, :, :]), dim=2)
+                # LOGGER.debug("latent full {}".format(latent_x))
+                batch_data["hidden"] = latent_x
+                # Transform to (batch_size x n_tp) x hidden_size
+                latent_x = torch.transpose(latent_x, 0, 1)
+                latent_x = torch.flatten(latent_x, start_dim=0, end_dim=1)
+                self.batch_x.append(latent_x)
+            hidden_val[batch_n] = batch_data
+            batch_n += 1
+        return hidden_val
 
     def hidden_state_frame(self):
         columns = ["RID", "TP", "DX", "DX_mask"] + ["hidden_" + str(i) for i in range(self.hidden_size)]

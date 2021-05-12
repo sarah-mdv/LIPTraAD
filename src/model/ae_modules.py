@@ -80,17 +80,15 @@ class Autoencoder(nn.Module):
             out_cat_seq.append(o_cat)
             out_val_seq.append(o_val)
 
-            h_fw = hidden.detach().cpu()
+            h_fw = hidden.detach().cpu().numpy()
             hidden_fw_batch.append(h_fw)
-            h_bw = hidden_bw.detach().cpu()
+            h_bw = hidden_bw.detach().cpu().numpy()
             hidden_bw_batch.append(h_bw)
-        # if len(hidden_fw_batch) != 0:
-        #     hidden_fw_batch = np.array(hidden_fw_batch)
-        #
-        # if len(hidden_bw_batch) != 0:
-        #     hidden_bw_batch = np.array(hidden_bw_batch)
-
-        return (torch.stack(out_cat_seq), torch.stack(out_val_seq), hidden_fw_batch, hidden_bw_batch) if latent else (torch.stack(out_cat_seq), torch.stack(out_val_seq))
+        if len(hidden_fw_batch) != 0:
+            hidden_fw_batch = np.array(hidden_fw_batch)
+        #if len(hidden_bw_batch) != 0:
+        #    hidden_bw_batch = np.array(hidden_bw_batch)
+        return hidden_fw_batch if latent else (torch.stack(out_cat_seq), torch.stack(out_val_seq))
 
 
 class StandardAutoencoder(Autoencoder):

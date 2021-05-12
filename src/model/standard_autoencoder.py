@@ -78,8 +78,8 @@ class StandardAutoencoderModel(Autoencoder):
 
             self.optimizer.zero_grad()
 
-            pred_cat, pred_val, hf, hb = self.model(torch.from_numpy(to_cat_seq(batch['cat'])),
-                                                    torch.from_numpy(batch['val']),latent=True)
+            pred_cat, pred_val = self.model(torch.from_numpy(to_cat_seq(batch['cat'])),
+                                                    torch.from_numpy(batch['val']),latent=False)
 
             mask_cat = batch['cat_msk']
             mask_val = batch['val_msk']
@@ -183,66 +183,66 @@ class StandardAutoencoderModel(Autoencoder):
             ocat, oval = self.model(icat, ival)
 
             all_tp = d['tp'].squeeze(axis=1)
-            for i in range(len(all_tp)):
-                # Only save the time points that have ground truth
-                if mask_cat.size==0:
-                    print(ocat)
-                    continue
-                if not mask_cat[i]:
-                    continue
+            try:
+                for i in range(len(all_tp)):
+                    # Only save the time points that have ground truth
+                    if not mask_cat[i]:
+                        continue
 
-                curr_cat_mask = np.full(mask_cat.shape, False)
-                curr_cat_mask[-(i+1):] = True
-                curr_val_mask = np.full(mask_val.shape, False)
-                curr_val_mask[-(i+1):] = True
+                    curr_cat_mask = np.full(mask_cat.shape, False)
+                    curr_cat_mask[-(i+1):] = True
+                    curr_val_mask = np.full(mask_val.shape, False)
+                    curr_val_mask[-(i+1):] = True
 
-                shifted_cat_mask = np.roll(mask_cat, len(mask_cat) - (i+1), axis= 0)
-                shifted_val_mask = np.roll(mask_val, len(mask_cat) - (i+1), axis= 0)
+                    shifted_cat_mask = np.roll(mask_cat, len(mask_cat) - (i+1), axis= 0)
+                    shifted_val_mask = np.roll(mask_val, len(mask_cat) - (i+1), axis= 0)
 
-                assert shifted_cat_mask.shape == mask_cat.shape == curr_cat_mask.shape
-                assert shifted_val_mask.shape == mask_val.shape == curr_val_mask.shape
+                    assert shifted_cat_mask.shape == mask_cat.shape == curr_cat_mask.shape
+                    assert shifted_val_mask.shape == mask_val.shape == curr_val_mask.shape
 
 
-                curr_cat_mask = curr_cat_mask & shifted_cat_mask
-                curr_val_mask = curr_val_mask & shifted_val_mask
+                    curr_cat_mask = curr_cat_mask & shifted_cat_mask
+                    curr_val_mask = curr_val_mask & shifted_val_mask
 
 
-                tp = np.roll(all_tp, len(mask_cat) - (i+1), axis=0)[curr_cat_mask]
-                rids = np.repeat(rid, len(tp))
+                    tp = np.roll(all_tp, len(mask_cat) - (i+1), axis=0)[curr_cat_mask]
+                    rids = np.repeat(rid, len(tp))
 
-                true_cat = np.roll(d['dx_truth'], len(d['dx_truth']) - (i+1), axis=0)
-                true_val = np.roll(d['val'][:, :], len(d['val']) - (i+1), axis=0)
+                    true_cat = np.roll(d['dx_truth'], len(d['dx_truth']) - (i+1), axis=0)
+                    true_val = np.roll(d['val'][:, :], len(d['val']) - (i+1), axis=0)
 
-                # Mask cat values
-                pred = ocat[i]
+                    # Mask cat values
+                    pred = ocat[i]
 
-                pred = pred.reshape(pred.size(0) * pred.size(1), -1)
-                curr_cat_mask = curr_cat_mask.reshape(-1, 1)
-                o_true = pred.new_tensor(true_cat.reshape(-1, 1)[curr_cat_mask], dtype=torch.long)
-                n_mask = pred.new_tensor(curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)
-                o_pred = pred[n_mask]
+                    pred = pred.reshape(pred.size(0) * pred.size(1), -1)
+                    curr_cat_mask = curr_cat_mask.reshape(-1, 1)
+                    o_true = pred.new_tensor(true_cat.reshape(-1, 1)[curr_cat_mask], dtype=torch.long)
+                    n_mask = pred.new_tensor(curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)
+                    o_pred = pred[n_mask]
 
-                # Mask continuous variables
-                pred = oval[i].squeeze(1)
-                invalid = ~curr_val_mask
-                true_val[invalid] = 0
-                indices = pred.new_tensor(invalid.astype(np.uint8), dtype=torch.uint8)
-                pred[indices] = 0
+                    # Mask continuous variables
+                    pred = oval[i].squeeze(1)
+                    invalid = ~curr_val_mask
+                    true_val[invalid] = 0
+                    indices = pred.new_tensor(invalid.astype(np.uint8), dtype=torch.uint8)
+                    pred[indices] = 0
 
-                o_true_val = true_val[torch.tensor(true_val).new_tensor(
-                    curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
-                o_pred_val = pred[pred.new_tensor(
-                    curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
-                assert o_pred.shape[0] == tp.shape[0]
+                    o_true_val = true_val[torch.tensor(true_val).new_tensor(
+                        curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
+                    o_pred_val = pred[pred.new_tensor(
+                        curr_cat_mask.squeeze(1).astype(np.uint8), dtype=torch.bool)]
+                    assert o_pred.shape[0] == tp.shape[0]
 
 
-                viscode.append(tp)
-                RID.append(rids)
-                dx.append(o_pred.detach().numpy())
-                dx_true.append(o_true.detach().numpy())
-                val_true.append(o_true_val)
-                val.append(o_pred_val.detach().numpy())
-
+                    viscode.append(tp)
+                    RID.append(rids)
+                    dx.append(o_pred.detach().numpy())
+                    dx_true.append(o_true.detach().numpy())
+                    val_true.append(o_true_val)
+                    val.append(o_pred_val.detach().numpy())
+            except IndexError:
+                LOGGER.debug("Index error for mask {}".format(mask_cat))
+                continue
         ret["VISCODE"] = np.concatenate(viscode)
         ret["RID"] = np.concatenate(RID)
         ret["DX"] = np.concatenate(dx, axis=0)
@@ -278,6 +278,51 @@ class StandardAutoencoderModel(Autoencoder):
 
         LOGGER.info("Predictions output in file {}".format(out))
         return bac
+
+    def collect_hidden_states(self, dataset:DataSet):
+        self.model.eval()
+        hidden_val = {}
+        batch_n = 0
+        batch_x = []
+        for batch in dataset.train:
+            batch_data = {}
+            batch_data["mask_cat"] = batch['cat_msk'][:]
+            batch_data["true_cat"] = batch['true_cat'][:]
+            batch_data["tp"] = batch["tp"][:]
+
+            if not batch_data["mask_cat"].sum() > 0:
+                continue
+
+            # latent_x shape: (n_tp, batch_size, hidden_size)
+            latent_x = self.model(torch.from_numpy(to_cat_seq(batch['cat'])),
+                                                    torch.from_numpy(batch['val']),latent=True)
+            if len(latent_x) != 0:
+                latent_x = torch.from_numpy(latent_x)
+                rids = torch.empty((latent_x.shape[0], 1, 1))
+                # Attach rids to hidden states so real values can be retrieved
+                for i in range(len(batch["rids"])):
+                    rid = torch.full((latent_x.shape[0], 1, 1), batch["rids"][i])
+                    rids = rid if i == 0 else torch.cat((rids, rid), dim=1)
+                mask = torch.from_numpy(batch_data["mask_cat"].astype(np.float32))
+                diags = torch.from_numpy(batch_data["true_cat"].astype(np.float32))
+                tps = torch.from_numpy(batch_data["tp"].astype(np.float32))
+                latent_x = torch.cat((mask, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((diags, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((tps, latent_x[:, :, :]), dim=2)
+                latent_x = torch.cat((rids, latent_x[:, :, :]), dim=2)
+                # LOGGER.debug("latent full {}".format(latent_x))
+                batch_data["hidden"] = latent_x
+                # Transform to (batch_size x n_tp) x hidden_size
+                latent_x = torch.transpose(latent_x, 0, 1)
+                latent_x = torch.flatten(latent_x, start_dim=0, end_dim=1)
+                batch_x.append(latent_x)
+            hidden_val[batch_n] = batch_data
+            batch_n += 1
+        batch_x = torch.cat(batch_x, dim=0)
+        columns = ["RID", "TP", "DX", "DX_mask"] + ["hidden_" + str(i) for i in range(self.model.h_size)]
+        hidden_states = pd.DataFrame(batch_x.numpy(), columns=columns)
+        return hidden_states
+
 
     def save_model(self):
         super().save_model()
