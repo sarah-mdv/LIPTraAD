@@ -6,6 +6,7 @@ from src.preprocess.dataloader import DataSet
 from src.model.nguyen_classifier import RNNClassifier
 from src.model.k_means_classifier import RNNPrototypeClassifier
 from src.model.standard_autoencoder import StandardAutoencoderModel
+from src.model.prototype_autoencoder import PrototypeAutoencoderModel
 from src.misc import load_feature, output_hidden_states
 
 import logging
@@ -145,6 +146,39 @@ class AutoencoderRunner(BaselineRunner):
                                 h_drop=kwargs.h_drop, mean=fold_dataset.mean,
                                 stds=fold_dataset.std)
         self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
+        self.model.build_summary_writer(kwargs.lr, kwargs.weight_decay, kwargs.batch_size)
+        self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
+        hidden_states = self.model.collect_hidden_states(fold_dataset)
+        if kwargs.inter_res:
+            output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3], first_data_point = 0,
+                                 extra_info_fields=["DXCHANGE", "AGE", "MMSE", "ABETA_UPENNBIOMK9_04_19_17",
+                                                    "PTGENDER"])
+
+        return self.model.predict(fold_dataset, fold[3], results_dir)
+
+
+class PrototypeAutoencoderRunner(BaselineRunner):
+    @property
+    def name(self):
+        return "pro-ae"
+
+    def run(
+            self,
+            fold,
+            results_dir,
+            kwargs
+    ):
+        LOGGER.debug("Running prototype-based autoencoder model")
+        fold_dataset = DataSet(fold, kwargs.validation, kwargs.data,
+                               load_feature(kwargs.features), fold_n=fold[3], strategy=kwargs.strategy,
+                               batch_size=kwargs.batch_size)
+        self.model = PrototypeAutoencoderModel(results_dir)
+        self.model.build_model(nb_classes=kwargs.n_classes, nb_measures=len(fold_dataset.train.value_fields()),
+                                h_size=kwargs.h_size, i_drop=kwargs.i_drop,
+                                h_drop=kwargs.h_drop, mean=fold_dataset.mean,
+                                stds=fold_dataset.std, n_prototypes=kwargs.n_prototypes)
+        self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
+        self.model.build_summary_writer(kwargs.lr, kwargs.weight_decay, kwargs.batch_size)
         self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
         hidden_states = self.model.collect_hidden_states(fold_dataset)
         if kwargs.inter_res:
@@ -158,7 +192,8 @@ class AutoencoderRunner(BaselineRunner):
 REGISTERED_BASELINE_RUNNERS = [
     RNNRunner(),
     RNNProRunner(),
-    AutoencoderRunner()
+    AutoencoderRunner(),
+    PrototypeAutoencoderRunner()
 ]
 
 RUNNERS_BY_NAME = {

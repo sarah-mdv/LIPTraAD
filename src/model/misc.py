@@ -64,6 +64,48 @@ def mae_loss(pred, true, mask):
     return torch.nn.functional.l1_loss(
         pred, pred.new(true), reduction='mean')
 
+def list_of_distances(X, Y):
+    '''
+    Given a list of vectors, X = [x_1, ..., x_n], and another list of vectors,
+    Y = [y_1, ... , y_m], we return a list of vectors
+            [[d(x_1, y_1), d(x_1, y_2), ... , d(x_1, y_m)],
+             ...
+             [d(x_n, y_1), d(x_n, y_2), ... , d(x_n, y_m)]],
+    where the distance metric used is the sqared euclidean distance.
+    The computation is achieved through a clever use of broadcasting.
+    '''
+    X = X.reshape((-1, X.shape[-1]))
+    Y = Y.reshape((-1, Y.shape[-1]))
+    XX = torch.reshape(list_of_norms(X), shape=(-1, 1))
+    YY = torch.reshape(list_of_norms(Y), shape=(1, -1))
+    output = XX + YY - 2 * torch.matmul(X, torch.transpose(Y, 0, 1))
+    return output
+
+
+def list_of_norms(X):
+    '''
+    X is a list of vectors X = [x_1, ..., x_n], we return
+        [d(x_1, x_1), d(x_2, x_2), ... , d(x_n, x_n)], where the distance
+    function is the squared euclidean distance.
+    '''
+    return torch.sum(torch.pow(X, 2), axis=1)
+
+
+def interpretability_loss(X, Y):
+    distances = list_of_distances(X, Y)
+    min = torch.min(distances, axis=1)[0]
+    error = torch.mean(min)
+    return error
+
+
+def diversity_loss(prototypes, d_min=2.0):
+    tot_sum = 0
+    for prototype in prototypes:
+        dist = d_min - torch.cdist(prototype.reshape(1, 1, -1), prototypes.unsqueeze(0), 2)
+        max = torch.clamp(dist, min=0)
+        tot_sum += torch.sum(max) - d_min
+    return tot_sum
+
 
 def to_cat_seq(labels, nb_classes=3):
     """
