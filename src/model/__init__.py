@@ -148,7 +148,7 @@ class AutoencoderRunner(BaselineRunner):
         self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
         self.model.build_summary_writer(kwargs.lr, kwargs.weight_decay, kwargs.batch_size)
         self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
-        hidden_states = self.model.collect_hidden_states(fold_dataset)
+        hidden_states = self.model.collect_hidden_states(fold_dataset.train)
         if kwargs.inter_res:
             output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3], first_data_point = 0,
                                  extra_info_fields=["DXCHANGE", "AGE", "MMSE", "ABETA_UPENNBIOMK9_04_19_17",
@@ -180,7 +180,7 @@ class PrototypeAutoencoderRunner(BaselineRunner):
         self.model.build_optimizer(kwargs.lr, kwargs.weight_decay)
         self.model.build_summary_writer(kwargs.lr, kwargs.weight_decay, kwargs.batch_size)
         self.model.fit(fold_dataset, kwargs.epochs, kwargs.seed, hidden=kwargs.inter_res)
-        hidden_states = self.model.collect_hidden_states(fold_dataset)
+        hidden_states = self.model.collect_hidden_states(fold_dataset.train)
         if kwargs.inter_res:
             output_hidden_states(hidden_states, kwargs.data, results_dir, fold[3], first_data_point = 0,
                                  extra_info_fields=["DXCHANGE", "AGE", "MMSE", "ABETA_UPENNBIOMK9_04_19_17",

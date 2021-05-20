@@ -51,7 +51,8 @@ class Prototype(nn.Module):
         all_similarities = []
         for encoded_sequence in X:
             similarities = torch.pow(encoded_sequence - self.prototypes, 2).sum(1)
-            #similarities = torch.exp(torch.neg(squared_distances))
+            similarities = torch.neg(similarities)
+            #similarities = torch.exp(similarities)
             all_similarities.append(similarities.unsqueeze(0))
         batch_size = X.shape[0]
         out = torch.cat(all_similarities, dim=0).reshape(batch_size, self.n_prototypes)
