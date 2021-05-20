@@ -2,6 +2,8 @@ import logging
 import argparse
 import json
 from datetime import datetime
+import numpy as np
+import pandas as pd
 
 from src.model import run_from_name
 from src.preprocess.fold_generator import FoldGen
@@ -36,10 +38,17 @@ def main(args):
 
         #Generate datasets over folds and perform training and evaluation
         fold_bac = 0
+        bac = []
         for fold in folds:
-            fold_bac += run_from_name(args.model, fold, results_dir, args)
-        bac = fold_bac / folds
-        LOGGER.info("BAC over {} folds: {}".format(folds, bac))
+            b = run_from_name(args.model, fold, results_dir, args)
+            fold_bac += b
+            bac.append(b)
+        mean_bac = fold_bac / args.folds
+        bac.append(mean_bac)
+        bac = pd.DataFrame(bac)
+        bac_out = results_dir / "BAC_record.csv"
+        bac.to_csv(bac_out)
+        LOGGER.info("BAC over {} folds: {}".format(folds, mean_bac))
     return 0
 
 def get_args():
