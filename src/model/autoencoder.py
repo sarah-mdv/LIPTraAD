@@ -1,4 +1,5 @@
 import logging
+import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
@@ -39,6 +40,9 @@ class Autoencoder(BaseClass):
         """
         pass
 
+    def intermed_hiddens(self, hidden, epoch, w_reg):
+        pass
+
     def build_summary_writer(self, lr, weight_decay, batch_size):
         datetime_now = datetime.now().strftime("%d%m-%H%M%S")
 
@@ -48,10 +52,11 @@ class Autoencoder(BaseClass):
         self.writer = SummaryWriter(writer_name)
 
 
-    def reg_loss(self):
-        return 0
+    def reg_loss(self, hidden):
+        return (torch.tensor([0]),torch.tensor([0]),torch.tensor([0]))
 
-    def fit(self, data:DataSet, epochs:int):
+    def fit(self, data: DataSet, epochs: int, seed: int, fold, w_ent=1, w_reg=1, hidden=False):
+
         """
         Start the training of the model with trainings data
         The methods build_model and build_optimizer should be called before this method
@@ -74,7 +79,7 @@ class Autoencoder(BaseClass):
         """
         pass
 
-    def save_model(self):
+    def save_model(self, ):
         """
         Save the entire model to disk (if possible)
         :return:

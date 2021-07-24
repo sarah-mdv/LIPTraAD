@@ -98,7 +98,7 @@ class RNNClassifier(Classifier):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    def save_model(self, results_dir, ):
+    def save_model(self, results_dir):
         super().save_model()
         t = time.localtime()
         current_time = time.strftime("%H%M%S", t)
