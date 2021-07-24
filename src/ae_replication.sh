@@ -4,20 +4,19 @@
 
 ROOTDIR=`readlink -f $0 | xargs dirname`
 export PYTHONPATH=$PYTHONPATH:$ROOTDIR
-
-for lr in 0.001 0.005 0.01
+let counter=13
+while [ $counter -le 15 ]
 do
-    for wd in 0.01 0.05 0.1
-    do
-        for bs in 16 64 128
-        do
-            python3 main.py \
-            --data $ROOTDIR/data/TADPOLE_D1_D2.csv \
-            --features $ROOTDIR/data/features \
-            --folds 10 --strategy forward --batch_size $bs \
-            --validation -d debug --i_drop 0.1 --h_drop 0.4 \
-            --h_size 128 --nb_layers 2 --epochs 10 --lr $lr\
-            --model ae  --out outpred.csv --weight_decay $wd
-        done
-    done
+    python3 main.py \
+    --data $ROOTDIR/data/TADPOLE_D1_D2.csv \
+    --features $ROOTDIR/data/features \
+    --folds 5 --strategy forward --batch_size 1 \
+    --validation -d debug --i_drop 0.1 --h_drop 0.3 \
+    --h_size 128 --nb_layers 2 --epochs 10 --lr 0.005\
+    --model pro-ae  --out outpred.csv --weight_decay 0.005\
+    --n_prototypes $counter
+     ((counter++))
 done
+
+
+python3 main.py --data $ROOTDIR/data/TADPOLE_D1_D2.csv --features $ROOTDIR/data/features --folds 10 --strategy forward --batch_size 1 --validation -d debug --i_drop 0.1 --h_drop 0.3 --h_size 128 --nb_layers 2 --epochs 7 --lr 0.01 --weight_decay 0.0001 --model pro-ae --out outpred.csv

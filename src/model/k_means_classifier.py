@@ -7,7 +7,7 @@ from pathlib import Path
 from sklearn.cluster import KMeans
 
 from src.model.classifier import Classifier
-from src.model.prototype import Prototype
+from src.model.prototype import FixedPrototype
 from src.preprocess.dataloader import (
     DataSet,
     Random,
@@ -63,7 +63,7 @@ class RNNPrototypeClassifier(Classifier):
 
         prototype_hidden = self.get_prototypes()
 
-        self.prototype = Prototype(self.hidden_size, self.n_prototypes, 3, prototype_hidden)
+        self.prototype =FixedPrototype(self.hidden_size, self.n_prototypes, 3, prototype_hidden)
         optimizer = torch.optim.Adam(self.prototype.parameters(), lr=lr, weight_decay=weight_decay)
 
         for i in range(epochs):

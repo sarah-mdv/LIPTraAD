@@ -9,6 +9,7 @@ import itertools
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 
 import src.misc as misc
 
@@ -64,6 +65,50 @@ def mae_loss(pred, true, mask):
     return torch.nn.functional.l1_loss(
         pred, pred.new(true), reduction='mean')
 
+def list_of_distances(X, Y):
+    '''
+    Given a list of vectors, X = [x_1, ..., x_n], and another list of vectors,
+    Y = [y_1, ... , y_m], we return a list of vectors
+            [[d(x_1, y_1), d(x_1, y_2), ... , d(x_1, y_m)],
+             ...
+             [d(x_n, y_1), d(x_n, y_2), ... , d(x_n, y_m)]],
+    where the distance metric used is the sqared euclidean distance.
+    The computation is achieved through a clever use of broadcasting.
+    '''
+    X = X.reshape((-1, X.shape[-1]))
+    Y = Y.reshape((-1, Y.shape[-1]))
+    XX = torch.reshape(list_of_norms(X), shape=(-1, 1))
+    YY = torch.reshape(list_of_norms(Y), shape=(1, -1))
+    output = XX + YY - 2 * torch.matmul(X, torch.transpose(Y, 0, 1))
+    return output
+
+
+def list_of_norms(X):
+    '''
+    X is a list of vectors X = [x_1, ..., x_n], we return
+        [d(x_1, x_1), d(x_2, x_2), ... , d(x_n, x_n)], where the distance
+    function is the squared euclidean distance.
+    '''
+    return torch.sum(torch.pow(X, 2), axis=1)
+
+
+def interpretability_loss(hidden, prototypes):
+    distances = compute_squared_distances(hidden, prototypes)
+    clustering = torch.min(distances, axis=1)[0]
+    clustering = clustering.sum()
+    evidence = torch.min(distances, axis=0)[0]
+    evidence = evidence.sum()
+    return clustering, evidence
+
+
+def diversity_loss(prototypes, d_min=2.0):
+    pdistances = F.pdist(prototypes)
+    pdistances = pdistances.unsqueeze(0)
+    zeros = torch.zeros(pdistances.shape)
+    temp = torch.cat([zeros, d_min - pdistances], dim=0)
+    div_reg = torch.square(torch.max(temp, dim=0)[0]).sum()
+    return div_reg
+
 
 def to_cat_seq(labels, nb_classes=3):
     """
@@ -92,9 +137,17 @@ def write_board(writer, model, epoch, loss, ent, mae):
     writer.add_scalar("ENT", ent, epoch)
     writer.add_scalar("MAE", mae, epoch)
 
-    for name, weight in model.named_parameters():
-        writer.add_histogram(name, weight, epoch)
-        writer.add_histogram("{}.grad".format(name), weight.grad, epoch)
+    # for name, weight in model.named_parameters():
+    #     writer.add_histogram(name, weight, epoch)
+    #     writer.add_histogram("{}.grad".format(name), weight.grad, epoch)
+
+
+def compute_squared_distances(x, y):
+    x_norm = (x ** 2).sum(1).view(-1, 1)
+    y_t = torch.transpose(y, 0, 1)
+    y_norm = (y ** 2).sum(1).view(1, -1)
+    dist = x_norm + y_norm - 2.0 * torch.matmul(x, y_t)
+    return torch.clamp(dist, 0.0, np.inf)
 
 
 def print_model_parameters(model):

@@ -163,6 +163,7 @@ def build_pred_frame(prediction, outpath=None):
 
 def output_hidden_states(hidden_states, datafile, results_dir, fold_n, first_data_point = 1, extra_info_fields=[
     "DXCHANGE"]):
+    hidden_states = hidden_states.drop(["DXCHANGE"], axis=1)
     columns = ['RID', 'M', 'DX'] + extra_info_fields
     frame = load_table(datafile, columns)
     res_dict = get_data_dict(frame, extra_info_fields)
@@ -179,7 +180,7 @@ def output_hidden_states(hidden_states, datafile, results_dir, fold_n, first_dat
             continue
     hidden_states = hidden_states.drop(hidden_states[hidden_states.TP == 0].index)
 
-    out = results_dir / "fold_{}_hidden_states.csv".format(fold_n)
+    out = results_dir / "hidden_states_{}.csv".format(fold_n)
     LOGGER.info("The hidden states have been output in file {}".format(out))
     hidden_states.to_csv(out, index=False)
 
@@ -278,23 +279,26 @@ def add_ci_col(values, ci, lo, hi):
 
 def censor_d1_table(_table):
     """ Remove problematic rows """
-    _table.drop(3229, inplace=True)  # RID 2190, Month = 3, Month_bl = 0.45
-    _table.drop(4372, inplace=True)  # RID 4579, Month = 3, Month_bl = 0.32
-    _table.drop(
-        8376, inplace=True)  # Duplicate row for subject 1088 at 72 months
-    _table.drop(
-        8586, inplace=True)  # Duplicate row for subject 1195 at 48 months
-    # _table.loc[
-    #     12215,
-    #     'Month'] = 48.  # Wrong EXAMDATE and Month for subject 4960
-    # _table.loc[
-    #     264,
-    #     'Month'] = 6.  # Wrong EXAMDATE and Month for subject 98
-    # _table.loc[
-    #     769,
-    #     'Month'] = 6.  # Wrong EXAMDATE and Month for subject 314
-    _table.drop(10254, inplace=True)  # Abnormaly small ICV for RID 4674
-    _table.drop(12245, inplace=True)  # Row without measurements, subject 5204
+    try:
+        _table.drop(3229, inplace=True)  # RID 2190, Month = 3, Month_bl = 0.45
+        _table.drop(4372, inplace=True)  # RID 4579, Month = 3, Month_bl = 0.32
+        _table.drop(
+            8376, inplace=True)  # Duplicate row for subject 1088 at 72 months
+        _table.drop(
+            8586, inplace=True)  # Duplicate row for subject 1195 at 48 months
+        # _table.loc[
+        #     12215,
+        #     'Month'] = 48.  # Wrong EXAMDATE and Month for subject 4960
+        # _table.loc[
+        #     264,
+        #     'Month'] = 6.  # Wrong EXAMDATE and Month for subject 98
+        # _table.loc[
+        #     769,
+        #     'Month'] = 6.  # Wrong EXAMDATE and Month for subject 314
+        _table.drop(10254, inplace=True)  # Abnormaly small ICV for RID 4674
+        _table.drop(12245, inplace=True)  # Row without measurements, subject 5204
+    except KeyError:
+        return 0
 
 
 def load_table(csv, columns):
