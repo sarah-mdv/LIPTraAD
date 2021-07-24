@@ -21,8 +21,10 @@ from src.preprocess.dataloader import (
 
 def main(args):
     #Setup results dir
-    datetime_now = datetime.now().strftime("%d%m%y-%H%M%S_lṛ_{}_wd_{}_bs_{}".format(args.lr, args.weight_decay,
-                                                                                    args.batch_size))
+    datetime_now = datetime.now().strftime("%d%m%y-%H%M%S_lṛ_{}_wd_{}_bs_{}_n_prototypes_{}_model_{}".format(args.lr,
+                                                                                              args.weight_decay,
+                                                                                    args.batch_size,
+                                                                                                              args.n_prototypes, args.model))
     results_dir = LOG_DIR / "results" / datetime_now
     results_dir.mkdir(parents=True)
 
@@ -39,16 +41,16 @@ def main(args):
         #Generate datasets over folds and perform training and evaluation
         fold_bac = 0
         bac = []
-        for fold in folds:
+        for i, fold in enumerate(folds):
             b = run_from_name(args.model, fold, results_dir, args)
-            fold_bac += b
+            fold_bac += b[0]
             bac.append(b)
+
         mean_bac = fold_bac / args.folds
-        bac.append(mean_bac)
-        bac = pd.DataFrame(bac)
-        bac_out = results_dir / "BAC_record.csv"
-        bac.to_csv(bac_out)
-        LOGGER.info("BAC over {} folds: {}".format(folds, mean_bac))
+
+        bac = pd.DataFrame(np.concatenate(np.vstack(bac)).reshape(args.folds, -1))
+        bac.to_csv(results_dir / "score_record.csv", index=False)
+        LOGGER.info("BAC over {} folds: {}".format(args.folds, mean_bac))
     return 0
 
 def get_args():
@@ -135,6 +137,11 @@ def get_args():
                         default=1.,
                         help="Entropy weight in loss"
                         )
+    parser.add_argument('--w_reg',
+                        type=float,
+                        default=1.,
+                        help="Entropy weight in loss"
+                        )
     parser.add_argument('--nb_layers',
                         type=int,
                         default=1,
@@ -157,6 +164,9 @@ def get_args():
     parser.add_argument('--n_prototypes',
                         type=int,
                         default=10)
+    parser.add_argument('--n_t_prototypes',
+                        type=int,
+                        default=0)
     parser.add_argument('--inter_res',
                         action="store_true",
                         help="Flag indicating whether to store intermediate values (train, test sets)")
